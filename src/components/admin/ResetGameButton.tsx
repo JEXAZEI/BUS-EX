@@ -37,8 +37,8 @@ export function ResetGameButton() {
   }
 
   return (
-    <div className="rounded-lg border border-red-300 bg-red-50 p-3">
-      <p className="mb-2 text-sm font-medium text-red-800">
+    <div className="alert-danger p-3">
+      <p className="mb-2 text-sm font-medium text-red-800 dark:text-red-300">
         This wipes all trades, holdings, price history, and events, and resets every
         student&apos;s cash balance. This cannot be undone. Are you sure?
       </p>

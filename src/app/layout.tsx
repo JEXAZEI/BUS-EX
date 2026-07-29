@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -12,10 +13,27 @@ export const viewport: Viewport = {
   maximumScale: 5,
 };
 
+const THEME_INIT_SCRIPT = `
+(function () {
+  try {
+    var stored = localStorage.getItem('theme');
+    var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    if (stored ? stored === 'dark' : prefersDark) {
+      document.documentElement.classList.add('dark');
+    }
+  } catch (e) {}
+})();
+`;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <Script id="theme-init" strategy="beforeInteractive">
+          {THEME_INIT_SCRIPT}
+        </Script>
+        {children}
+      </body>
     </html>
   );
 }

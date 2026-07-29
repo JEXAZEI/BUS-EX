@@ -16,7 +16,7 @@ export function CompanyRow({ company }: { company: Company }) {
           <p className="font-semibold">
             {company.name} <span className="font-mono text-xs text-gray-400">{company.ticker}</span>
             {company.is_delisted && (
-              <span className="ml-2 rounded bg-red-100 px-1.5 py-0.5 text-xs font-medium text-red-700">
+              <span className="ml-2 badge-danger">
                 DELISTED
               </span>
             )}
@@ -32,7 +32,7 @@ export function CompanyRow({ company }: { company: Company }) {
         </div>
       </div>
       {editing && (
-        <div className="mt-3 border-t border-gray-100 pt-3">
+        <div className="mt-3 border-t border-gray-100 dark:border-gray-700 pt-3">
           <CompanyForm company={company} onDone={() => setEditing(false)} />
         </div>
       )}

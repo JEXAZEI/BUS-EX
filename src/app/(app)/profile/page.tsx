@@ -101,7 +101,7 @@ export default async function ProfilePage() {
         {holdingsList.length === 0 ? (
           <p className="text-sm text-gray-400">You don&apos;t own any shares yet.</p>
         ) : (
-          <ul className="divide-y divide-gray-100 text-sm">
+          <ul className="divide-y divide-gray-100 dark:divide-gray-700 text-sm">
             {holdingsList.map((h) => (
               <li key={h.company.id} className="flex items-center justify-between py-2">
                 <Link href={`/company/${h.company.id}`} className="font-medium hover:underline">
@@ -127,7 +127,7 @@ export default async function ProfilePage() {
         {tradeRows.length === 0 ? (
           <p className="text-sm text-gray-400">No trades yet.</p>
         ) : (
-          <ul className="divide-y divide-gray-100 text-sm">
+          <ul className="divide-y divide-gray-100 dark:divide-gray-700 text-sm">
             {tradeRows.map((t) => (
               <li key={t.id} className="flex items-center justify-between py-1.5">
                 <span>

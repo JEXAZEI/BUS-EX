@@ -68,7 +68,7 @@ export function TradeForm({
 
   if (isDelisted) {
     return (
-      <div className="card bg-red-50 text-sm text-red-700">
+      <div className="alert-danger text-sm text-red-700 dark:text-red-300">
         This company is currently delisted and cannot be traded.
       </div>
     );
@@ -81,7 +81,7 @@ export function TradeForm({
           type="button"
           onClick={() => setSide("buy")}
           className={`flex-1 rounded-lg py-2 text-sm font-semibold ${
-            side === "buy" ? "bg-up text-white" : "bg-gray-100 text-gray-600"
+            side === "buy" ? "bg-up text-white" : "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300"
           }`}
         >
           Buy
@@ -90,7 +90,7 @@ export function TradeForm({
           type="button"
           onClick={() => setSide("sell")}
           className={`flex-1 rounded-lg py-2 text-sm font-semibold ${
-            side === "sell" ? "bg-down text-white" : "bg-gray-100 text-gray-600"
+            side === "sell" ? "bg-down text-white" : "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300"
           }`}
         >
           Sell
@@ -112,7 +112,7 @@ export function TradeForm({
           />
         </div>
 
-        <div className="rounded-lg bg-gray-50 p-3 text-sm text-gray-600">
+        <div className="rounded-lg bg-gray-50 p-3 text-sm text-gray-600 dark:bg-gray-900/40 dark:text-gray-300">
           <p>
             Cash balance: <span className="font-mono">${userCashBalance.toFixed(2)}</span>
           </p>

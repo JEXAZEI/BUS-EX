@@ -34,7 +34,7 @@ export default async function AdminEventsPage() {
         </h2>
         <div className="space-y-2">
           {templates.map((t) => (
-            <div key={t.id} className="flex items-center justify-between border-b border-gray-100 pb-2 text-sm last:border-0">
+            <div key={t.id} className="flex items-center justify-between border-b border-gray-100 dark:border-gray-700 pb-2 text-sm last:border-0">
               <div>
                 <p className="font-medium">{t.title_template}</p>
                 <p className="text-xs text-gray-400">
@@ -57,7 +57,7 @@ export default async function AdminEventsPage() {
         </h2>
         <ul className="max-h-96 space-y-2 overflow-y-auto text-sm">
           {events.map((e) => (
-            <li key={e.id} className="border-b border-gray-100 pb-2 last:border-0">
+            <li key={e.id} className="border-b border-gray-100 dark:border-gray-700 pb-2 last:border-0">
               <p className="font-medium">{e.title}</p>
               <p className="text-gray-500">{e.description}</p>
               <p className="text-xs text-gray-400">{new Date(e.created_at).toLocaleString()}</p>

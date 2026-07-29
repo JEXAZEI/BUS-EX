@@ -48,7 +48,7 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
           <h1 className="text-xl font-bold">{typedCompany.name}</h1>
           <span className="font-mono text-sm text-gray-400">{typedCompany.ticker}</span>
           {typedCompany.is_delisted && (
-            <span className="rounded bg-red-100 px-1.5 py-0.5 text-xs font-medium text-red-700">
+            <span className="badge-danger">
               DELISTED
             </span>
           )}
@@ -62,14 +62,20 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
         <PriceChart data={chartData} />
       </div>
 
-      <TradeForm
-        companyId={typedCompany.id}
-        poolCash={typedCompany.pool_cash}
-        poolShares={typedCompany.pool_shares}
-        isDelisted={typedCompany.is_delisted}
-        userCashBalance={profile.cash_balance}
-        userShares={holdingShares}
-      />
+      {profile.role === "student" ? (
+        <TradeForm
+          companyId={typedCompany.id}
+          poolCash={typedCompany.pool_cash}
+          poolShares={typedCompany.pool_shares}
+          isDelisted={typedCompany.is_delisted}
+          userCashBalance={profile.cash_balance}
+          userShares={holdingShares}
+        />
+      ) : (
+        <div className="card bg-gray-50 text-sm text-gray-500 dark:bg-gray-900/40 dark:text-gray-400">
+          Teacher and owner accounts cannot buy or sell shares.
+        </div>
+      )}
 
       <div className="card">
         <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-500">
@@ -78,7 +84,7 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
         {recentTrades.length === 0 ? (
           <p className="text-sm text-gray-400">No trades yet.</p>
         ) : (
-          <ul className="divide-y divide-gray-100 text-sm">
+          <ul className="divide-y divide-gray-100 dark:divide-gray-700 text-sm">
             {recentTrades.map((t, i) => (
               <li key={i} className="flex items-center justify-between py-1.5">
                 <span className={t.side === "buy" ? "text-up" : "text-down"}>

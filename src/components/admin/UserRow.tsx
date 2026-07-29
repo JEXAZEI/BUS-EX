@@ -72,7 +72,7 @@ export function UserRow({ user }: { user: Profile }) {
             @{user.username}{" "}
             <span className="text-xs font-normal capitalize text-gray-400">{user.role}</span>
             {!user.is_active && (
-              <span className="ml-2 rounded bg-gray-200 px-1.5 py-0.5 text-xs font-medium text-gray-600">
+              <span className="ml-2 badge-muted">
                 Inactive
               </span>
             )}
@@ -92,7 +92,7 @@ export function UserRow({ user }: { user: Profile }) {
       </div>
 
       {showReset && (
-        <form onSubmit={resetPassword} className="mt-3 flex items-end gap-2 border-t border-gray-100 pt-3">
+        <form onSubmit={resetPassword} className="mt-3 flex items-end gap-2 border-t border-gray-100 dark:border-gray-700 pt-3">
           <div className="flex-1">
             <label className="label">New password</label>
             <input
@@ -111,14 +111,14 @@ export function UserRow({ user }: { user: Profile }) {
       )}
 
       {user.role === "student" && (
-        <div className="mt-3 border-t border-gray-100 pt-3">
+        <div className="mt-3 border-t border-gray-100 dark:border-gray-700 pt-3">
           {!confirmDelete ? (
             <button onClick={() => setConfirmDelete(true)} className="text-xs text-red-600 hover:underline">
               Permanently delete account
             </button>
           ) : (
-            <div className="rounded-lg border border-red-300 bg-red-50 p-2">
-              <p className="mb-2 text-xs text-red-800">
+            <div className="alert-danger p-2">
+              <p className="mb-2 text-xs text-red-800 dark:text-red-300">
                 This permanently deletes @{user.username} and all their trade history. Cannot be
                 undone.
               </p>

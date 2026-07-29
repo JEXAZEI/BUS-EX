@@ -68,7 +68,7 @@ export default async function DashboardPage() {
                       {c.name}{" "}
                       <span className="font-mono text-xs text-gray-400">{c.ticker}</span>
                       {c.is_delisted && (
-                        <span className="ml-2 rounded bg-red-100 px-1.5 py-0.5 text-xs font-medium text-red-700">
+                        <span className="ml-2 badge-danger">
                           DELISTED
                         </span>
                       )}

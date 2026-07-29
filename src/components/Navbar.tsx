@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import type { UserRole } from "@/lib/types";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 export function Navbar({ username, role }: { username: string; role: UserRole }) {
   const pathname = usePathname();
@@ -23,9 +24,9 @@ export function Navbar({ username, role }: { username: string; role: UserRole })
   }
 
   return (
-    <nav className="sticky top-0 z-20 border-b border-gray-200 bg-white/90 backdrop-blur">
+    <nav className="sticky top-0 z-20 border-b border-gray-200 bg-white/90 backdrop-blur dark:border-gray-800 dark:bg-gray-900/90">
       <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
-        <Link href="/dashboard" className="text-lg font-extrabold text-brand-700">
+        <Link href="/dashboard" className="text-lg font-extrabold text-brand-700 dark:text-brand-500">
           BUS-EX
         </Link>
 
@@ -36,39 +37,44 @@ export function Navbar({ username, role }: { username: string; role: UserRole })
               href={l.href}
               className={`rounded-lg px-3 py-2 text-sm font-medium ${
                 pathname === l.href || pathname.startsWith(l.href + "/")
-                  ? "bg-brand-50 text-brand-700"
-                  : "text-gray-600 hover:bg-gray-100"
+                  ? "bg-brand-50 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300"
+                  : "text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
               }`}
             >
               {l.label}
             </Link>
           ))}
           <span className="ml-2 text-sm text-gray-400">@{username}</span>
+          <ThemeToggle className="ml-2" />
           <button onClick={logout} className="btn-secondary ml-2">
             Log out
           </button>
         </div>
 
-        <button
-          className="sm:hidden"
-          aria-label="Toggle menu"
-          onClick={() => setOpen((o) => !o)}
-        >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-            <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-          </svg>
-        </button>
+        <div className="flex items-center gap-2 sm:hidden">
+          <ThemeToggle />
+          <button
+            aria-label="Toggle menu"
+            onClick={() => setOpen((o) => !o)}
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" className="text-gray-700 dark:text-gray-200">
+              <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       {open && (
-        <div className="flex flex-col gap-1 border-t border-gray-200 px-4 py-3 sm:hidden">
+        <div className="flex flex-col gap-1 border-t border-gray-200 px-4 py-3 dark:border-gray-800 sm:hidden">
           {links.map((l) => (
             <Link
               key={l.href}
               href={l.href}
               onClick={() => setOpen(false)}
               className={`rounded-lg px-3 py-2 text-sm font-medium ${
-                pathname === l.href ? "bg-brand-50 text-brand-700" : "text-gray-600 hover:bg-gray-100"
+                pathname === l.href
+                  ? "bg-brand-50 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300"
+                  : "text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
               }`}
             >
               {l.label}
