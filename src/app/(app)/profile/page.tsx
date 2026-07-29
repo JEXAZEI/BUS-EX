@@ -5,6 +5,7 @@ import { holdings, netWorthSnapshots, trades, companies as companiesTable } from
 import { getCurrentProfile } from "@/lib/session";
 import { snapshotNetWorth } from "@/lib/services/profile";
 import { PriceChart } from "@/components/PriceChart";
+import { ChangePasswordForm } from "@/components/ChangePasswordForm";
 import { companyPrice, type Company } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -141,6 +142,13 @@ export default async function ProfilePage() {
             ))}
           </ul>
         )}
+      </div>
+
+      <div className="card">
+        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-500">
+          Change password
+        </h2>
+        <ChangePasswordForm />
       </div>
     </div>
   );
