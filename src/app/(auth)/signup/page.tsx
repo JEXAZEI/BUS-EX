@@ -50,8 +50,6 @@ export default function SignupPage() {
             required
             minLength={3}
             maxLength={50}
-            pattern="[a-zA-Z0-9._%+-]+"
-            title="Letters, numbers, and . _ % + - only"
           />
         </div>
         <div>

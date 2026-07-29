@@ -10,7 +10,7 @@ export const usernameSchema = z
   .trim()
   .min(3, "Username must be at least 3 characters")
   .max(50, "Username must be at most 50 characters")
-  .regex(/^[a-zA-Z0-9._%+-]+$/, "Username can only contain letters, numbers, and . _ % + -");
+  .regex(/^[a-zA-Z0-9._%+@-]+$/, "Username can only contain letters, numbers, and . _ % + @ -");
 
 export const passwordSchema = z
   .string()
