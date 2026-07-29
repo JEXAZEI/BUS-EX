@@ -1,52 +1,68 @@
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { and, desc, eq, gt } from "drizzle-orm";
+import { db } from "@/lib/db/client";
+import { holdings, netWorthSnapshots, trades, companies as companiesTable } from "@/lib/db/schema";
 import { getCurrentProfile } from "@/lib/session";
+import { snapshotNetWorth } from "@/lib/services/profile";
 import { PriceChart } from "@/components/PriceChart";
-import { companyPrice, type Company } from "@/lib/supabase/types";
+import { companyPrice, type Company } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
 export default async function ProfilePage() {
-  const supabase = await createClient();
   const profile = await getCurrentProfile();
   if (!profile) return null;
 
   // Record a fresh net-worth snapshot every time the profile is viewed so
   // the chart below fills in over the course of the term.
-  await supabase.rpc("snapshot_my_net_worth");
+  await snapshotNetWorth(profile.id);
 
-  const [{ data: holdingsRaw }, { data: snapshots }, { data: trades }] = await Promise.all([
-    supabase
-      .from("holdings")
-      .select("shares, company:companies(id, name, ticker, pool_cash, pool_shares, is_delisted)")
-      .eq("user_id", profile.id)
-      .gt("shares", 0),
-    supabase
-      .from("net_worth_snapshots")
-      .select("net_worth, recorded_at")
-      .eq("user_id", profile.id)
-      .order("recorded_at", { ascending: false })
+  const [holdingsRows, snapshotRows, tradeRows] = await Promise.all([
+    db
+      .select({ shares: holdings.shares, company: companiesTable })
+      .from(holdings)
+      .innerJoin(companiesTable, eq(companiesTable.id, holdings.companyId))
+      .where(and(eq(holdings.userId, profile.id), gt(holdings.shares, "0"))),
+    db
+      .select({ netWorth: netWorthSnapshots.netWorth, recordedAt: netWorthSnapshots.recordedAt })
+      .from(netWorthSnapshots)
+      .where(eq(netWorthSnapshots.userId, profile.id))
+      .orderBy(desc(netWorthSnapshots.recordedAt))
       .limit(200),
-    supabase
-      .from("trades")
-      .select("id, side, shares, cash_amount, price_per_share, created_at, company:companies(name, ticker)")
-      .eq("user_id", profile.id)
-      .order("created_at", { ascending: false })
+    db
+      .select({
+        id: trades.id,
+        side: trades.side,
+        shares: trades.shares,
+        cashAmount: trades.cashAmount,
+        createdAt: trades.createdAt,
+        companyName: companiesTable.name,
+        companyTicker: companiesTable.ticker,
+      })
+      .from(trades)
+      .innerJoin(companiesTable, eq(companiesTable.id, trades.companyId))
+      .where(eq(trades.userId, profile.id))
+      .orderBy(desc(trades.createdAt))
       .limit(30),
   ]);
 
-  type HoldingRow = { shares: number; company: Company | null };
-  const holdings = (holdingsRaw ?? []) as unknown as HoldingRow[];
+  const holdingsList = holdingsRows.map((h) => ({
+    shares: parseFloat(h.shares),
+    company: {
+      id: h.company.id,
+      name: h.company.name,
+      ticker: h.company.ticker,
+      pool_cash: parseFloat(h.company.poolCash),
+      pool_shares: parseFloat(h.company.poolShares),
+    } as Pick<Company, "id" | "name" | "ticker" | "pool_cash" | "pool_shares">,
+  }));
 
-  const holdingsValue = holdings.reduce((sum, h) => {
-    if (!h.company) return sum;
-    return sum + h.shares * companyPrice(h.company);
-  }, 0);
+  const holdingsValue = holdingsList.reduce((sum, h) => sum + h.shares * companyPrice(h.company), 0);
   const netWorth = profile.cash_balance + holdingsValue;
 
-  const chartData = [...(snapshots ?? [])]
+  const chartData = [...snapshotRows]
     .reverse()
-    .map((s) => ({ price: s.net_worth, recorded_at: s.recorded_at }));
+    .map((s) => ({ price: parseFloat(s.netWorth), recorded_at: s.recordedAt.toISOString() }));
 
   return (
     <div className="space-y-4">
@@ -81,27 +97,24 @@ export default async function ProfilePage() {
         <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-500">
           Portfolio
         </h2>
-        {holdings.length === 0 ? (
+        {holdingsList.length === 0 ? (
           <p className="text-sm text-gray-400">You don&apos;t own any shares yet.</p>
         ) : (
           <ul className="divide-y divide-gray-100 text-sm">
-            {holdings.map(
-              (h) =>
-                h.company && (
-                  <li key={h.company.id} className="flex items-center justify-between py-2">
-                    <Link href={`/company/${h.company.id}`} className="font-medium hover:underline">
-                      {h.company.name}{" "}
-                      <span className="font-mono text-xs text-gray-400">{h.company.ticker}</span>
-                    </Link>
-                    <div className="text-right">
-                      <p className="font-mono">{h.shares.toFixed(4)} sh</p>
-                      <p className="font-mono text-xs text-gray-400">
-                        ${(h.shares * companyPrice(h.company)).toFixed(2)}
-                      </p>
-                    </div>
-                  </li>
-                )
-            )}
+            {holdingsList.map((h) => (
+              <li key={h.company.id} className="flex items-center justify-between py-2">
+                <Link href={`/company/${h.company.id}`} className="font-medium hover:underline">
+                  {h.company.name}{" "}
+                  <span className="font-mono text-xs text-gray-400">{h.company.ticker}</span>
+                </Link>
+                <div className="text-right">
+                  <p className="font-mono">{h.shares.toFixed(4)} sh</p>
+                  <p className="font-mono text-xs text-gray-400">
+                    ${(h.shares * companyPrice(h.company)).toFixed(2)}
+                  </p>
+                </div>
+              </li>
+            ))}
           </ul>
         )}
       </div>
@@ -110,30 +123,20 @@ export default async function ProfilePage() {
         <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-500">
           Your trade history
         </h2>
-        {!trades || trades.length === 0 ? (
+        {tradeRows.length === 0 ? (
           <p className="text-sm text-gray-400">No trades yet.</p>
         ) : (
           <ul className="divide-y divide-gray-100 text-sm">
-            {(trades as unknown as Array<{
-              id: string;
-              side: string;
-              shares: number;
-              cash_amount: number;
-              price_per_share: number;
-              created_at: string;
-              company: { name: string; ticker: string } | null;
-            }>).map((t) => (
+            {tradeRows.map((t) => (
               <li key={t.id} className="flex items-center justify-between py-1.5">
                 <span>
                   <span className={t.side === "buy" ? "text-up" : "text-down"}>
                     {t.side === "buy" ? "Bought" : "Sold"}
                   </span>{" "}
-                  {t.shares.toFixed(2)} {t.company?.ticker ?? ""}
+                  {parseFloat(t.shares).toFixed(2)} {t.companyTicker}
                 </span>
-                <span className="font-mono text-gray-500">${t.cash_amount.toFixed(2)}</span>
-                <span className="text-xs text-gray-400">
-                  {new Date(t.created_at).toLocaleDateString()}
-                </span>
+                <span className="font-mono text-gray-500">${parseFloat(t.cashAmount).toFixed(2)}</span>
+                <span className="text-xs text-gray-400">{t.createdAt.toLocaleDateString()}</span>
               </li>
             ))}
           </ul>

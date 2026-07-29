@@ -1,18 +1,21 @@
+import { asc, desc } from "drizzle-orm";
 import { requireAdmin } from "@/lib/session";
-import { createClient } from "@/lib/supabase/server";
+import { db } from "@/lib/db/client";
+import { eventTemplates, events as eventsTable } from "@/lib/db/schema";
+import { toEventTemplate, toMarketEvent } from "@/lib/db/mappers";
 import { TriggerEventButton } from "@/components/admin/TriggerEventButton";
-import type { EventTemplate, MarketEvent } from "@/lib/supabase/types";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminEventsPage() {
   await requireAdmin();
-  const supabase = await createClient();
 
-  const [{ data: templates }, { data: events }] = await Promise.all([
-    supabase.from("event_templates").select("*").order("event_type"),
-    supabase.from("events").select("*").order("created_at", { ascending: false }).limit(50),
+  const [templateRows, eventRows] = await Promise.all([
+    db.select().from(eventTemplates).orderBy(asc(eventTemplates.eventType)),
+    db.select().from(eventsTable).orderBy(desc(eventsTable.createdAt)).limit(50),
   ]);
+  const templates = templateRows.map(toEventTemplate);
+  const events = eventRows.map(toMarketEvent);
 
   return (
     <div className="space-y-4">
@@ -30,7 +33,7 @@ export default async function AdminEventsPage() {
           Event templates
         </h2>
         <div className="space-y-2">
-          {((templates ?? []) as EventTemplate[]).map((t) => (
+          {templates.map((t) => (
             <div key={t.id} className="flex items-center justify-between border-b border-gray-100 pb-2 text-sm last:border-0">
               <div>
                 <p className="font-medium">{t.title_template}</p>
@@ -43,8 +46,8 @@ export default async function AdminEventsPage() {
           ))}
         </div>
         <p className="mt-3 text-xs text-gray-400">
-          Add more templates directly in the <code>event_templates</code> table in Supabase to
-          expand the pool -- no code changes needed.
+          Add more templates directly in the <code>event_templates</code> table (Neon SQL editor)
+          to expand the pool -- no code changes needed.
         </p>
       </div>
 
@@ -53,7 +56,7 @@ export default async function AdminEventsPage() {
           Event log
         </h2>
         <ul className="max-h-96 space-y-2 overflow-y-auto text-sm">
-          {((events ?? []) as MarketEvent[]).map((e) => (
+          {events.map((e) => (
             <li key={e.id} className="border-b border-gray-100 pb-2 last:border-0">
               <p className="font-medium">{e.title}</p>
               <p className="text-gray-500">{e.description}</p>

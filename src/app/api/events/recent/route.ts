@@ -1,24 +1,16 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { desc } from "drizzle-orm";
+import { getCurrentProfile } from "@/lib/session";
+import { db } from "@/lib/db/client";
+import { events } from "@/lib/db/schema";
+import { toMarketEvent } from "@/lib/db/mappers";
 
 export async function GET() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
+  const profile = await getCurrentProfile();
+  if (!profile) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  const { data, error } = await supabase
-    .from("events")
-    .select("id, event_type, title, description, created_at")
-    .order("created_at", { ascending: false })
-    .limit(20);
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  return NextResponse.json({ events: data ?? [] });
+  const rows = await db.select().from(events).orderBy(desc(events.createdAt)).limit(20);
+  return NextResponse.json({ events: rows.map(toMarketEvent) });
 }

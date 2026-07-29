@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { loginSchema } from "@/lib/validation";
 import { checkLoginRateLimit, recordLoginAttempt, getClientIdentifier } from "@/lib/rateLimit";
+import { findUserByUsername } from "@/lib/services/users";
+import { verifyPassword } from "@/lib/auth/password";
+import { createSession, setSessionCookie } from "@/lib/auth/session";
 
 const GENERIC_ERROR = "Invalid username or password";
 
@@ -29,39 +30,19 @@ export async function POST(request: Request) {
     );
   }
 
-  const admin = createAdminClient();
-  const { data: profileRow } = await admin
-    .from("profiles")
-    .select("id, is_active")
-    .ilike("username", username)
-    .maybeSingle();
-
-  if (!profileRow) {
+  const user = await findUserByUsername(username);
+  if (!user) {
     await recordLoginAttempt(identifier, false);
     return NextResponse.json({ error: GENERIC_ERROR }, { status: 401 });
   }
 
-  const { data: authUser, error: getUserError } = await admin.auth.admin.getUserById(
-    profileRow.id
-  );
-  if (getUserError || !authUser.user?.email) {
+  const passwordOk = await verifyPassword(password, user.passwordHash);
+  if (!passwordOk) {
     await recordLoginAttempt(identifier, false);
     return NextResponse.json({ error: GENERIC_ERROR }, { status: 401 });
   }
 
-  const supabase = await createClient();
-  const { error: signInError } = await supabase.auth.signInWithPassword({
-    email: authUser.user.email,
-    password,
-  });
-
-  if (signInError) {
-    await recordLoginAttempt(identifier, false);
-    return NextResponse.json({ error: GENERIC_ERROR }, { status: 401 });
-  }
-
-  if (!profileRow.is_active) {
-    await supabase.auth.signOut();
+  if (!user.isActive) {
     await recordLoginAttempt(identifier, false);
     return NextResponse.json(
       { error: "This account has been disabled. Contact your teacher." },
@@ -69,6 +50,9 @@ export async function POST(request: Request) {
     );
   }
 
+  const token = await createSession(user.id);
+  await setSessionCookie(token);
   await recordLoginAttempt(identifier, true);
+
   return NextResponse.json({ ok: true }, { status: 200 });
 }

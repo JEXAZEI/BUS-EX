@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/session";
-import { createClient } from "@/lib/supabase/server";
+import { getDefaultStartingCash } from "@/lib/services/admin";
 import { TriggerEventButton } from "@/components/admin/TriggerEventButton";
 import { ResetGameButton } from "@/components/admin/ResetGameButton";
 import { StartingCashForm } from "@/components/admin/StartingCashForm";
@@ -9,9 +9,7 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminHomePage() {
   const profile = await requireAdmin();
-  const supabase = await createClient();
-  const { data: settingsRows } = await supabase.rpc("admin_get_game_settings");
-  const startingCash = settingsRows?.[0]?.default_starting_cash ?? 1000;
+  const startingCash = await getDefaultStartingCash();
 
   return (
     <div className="space-y-4">

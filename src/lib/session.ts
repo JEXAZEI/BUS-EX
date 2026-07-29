@@ -1,22 +1,12 @@
-import { createClient } from "@/lib/supabase/server";
-import type { Profile } from "@/lib/supabase/types";
 import { redirect } from "next/navigation";
+import { getSessionUser } from "@/lib/auth/session";
+import { toProfile } from "@/lib/db/mappers";
+import type { Profile } from "@/lib/types";
 
 /** Returns the signed-in user's profile, or null if not authenticated. */
 export async function getCurrentProfile(): Promise<Profile | null> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", user.id)
-    .single();
-
-  return (profile as Profile) ?? null;
+  const user = await getSessionUser();
+  return user ? toProfile(user) : null;
 }
 
 /** Use at the top of any page that requires a signed-in user. */

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
-import type { UserRole } from "@/lib/supabase/types";
+import type { UserRole } from "@/lib/types";
 
 export function Navbar({ username, role }: { username: string; role: UserRole }) {
   const pathname = usePathname();

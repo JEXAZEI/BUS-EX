@@ -1,13 +1,11 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentProfile } from "@/lib/session";
 import { tradeSchema } from "@/lib/validation";
+import { executeTrade, TradeError } from "@/lib/services/trades";
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
+  const profile = await getCurrentProfile();
+  if (!profile) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
@@ -29,18 +27,25 @@ export async function POST(request: Request) {
   const { companyId, side, shares } = parsed.data;
 
   // The client-submitted price/estimate (if any) is never trusted -- only
-  // companyId/side/shares are sent, and execute_trade recomputes the real
+  // companyId/side/shares are sent, and executeTrade recomputes the real
   // price server-side from the live AMM pool inside a locked transaction.
-  const { data, error } = await supabase.rpc("execute_trade", {
-    p_company_id: companyId,
-    p_side: side,
-    p_shares: shares,
-  });
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
+  try {
+    const result = await executeTrade(profile.id, companyId, side, shares);
+    return NextResponse.json({
+      ok: true,
+      result: {
+        cash_amount: result.cashAmount,
+        price_per_share: result.pricePerShare,
+        new_spot_price: result.newSpotPrice,
+        new_cash_balance: result.newCashBalance,
+        new_holding_shares: result.newHoldingShares,
+      },
+    });
+  } catch (err) {
+    if (err instanceof TradeError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
+    console.error("Trade failed:", err);
+    return NextResponse.json({ error: "Trade failed. Try again." }, { status: 500 });
   }
-
-  const result = Array.isArray(data) ? data[0] : data;
-  return NextResponse.json({ ok: true, result });
 }

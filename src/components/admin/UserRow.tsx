@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Profile } from "@/lib/supabase/types";
+import type { Profile } from "@/lib/types";
 
 export function UserRow({ user }: { user: Profile }) {
   const router = useRouter();

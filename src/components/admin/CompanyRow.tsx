@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { CompanyForm } from "@/components/admin/CompanyForm";
 import { DelistButton } from "@/components/admin/DelistButton";
-import type { Company } from "@/lib/supabase/types";
-import { companyPrice } from "@/lib/supabase/types";
+import type { Company } from "@/lib/types";
+import { companyPrice } from "@/lib/types";
 
 export function CompanyRow({ company }: { company: Company }) {
   const [editing, setEditing] = useState(false);

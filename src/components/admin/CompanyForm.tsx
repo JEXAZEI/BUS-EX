@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Company } from "@/lib/supabase/types";
+import type { Company } from "@/lib/types";
 
 export function CompanyForm({ company, onDone }: { company?: Company; onDone?: () => void }) {
   const router = useRouter();

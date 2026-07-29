@@ -1,16 +1,17 @@
+import { asc } from "drizzle-orm";
 import { requireAdmin } from "@/lib/session";
-import { createClient } from "@/lib/supabase/server";
+import { db } from "@/lib/db/client";
+import { companies as companiesTable } from "@/lib/db/schema";
+import { toCompany } from "@/lib/db/mappers";
 import { CompanyForm } from "@/components/admin/CompanyForm";
 import { CompanyRow } from "@/components/admin/CompanyRow";
 import { CollapsibleCard } from "@/components/admin/CollapsibleCard";
-import type { Company } from "@/lib/supabase/types";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminCompaniesPage() {
   await requireAdmin();
-  const supabase = await createClient();
-  const { data: companies } = await supabase.from("companies").select("*").order("name");
+  const rows = await db.select().from(companiesTable).orderBy(asc(companiesTable.name));
 
   return (
     <div className="space-y-4">
@@ -21,7 +22,7 @@ export default async function AdminCompaniesPage() {
       </CollapsibleCard>
 
       <div className="space-y-2">
-        {((companies ?? []) as Company[]).map((c) => (
+        {rows.map(toCompany).map((c) => (
           <CompanyRow key={c.id} company={c} />
         ))}
       </div>

@@ -1,17 +1,18 @@
 -- ============================================================================
 -- BUS-EX: seed data
---   - Owner/teacher email allowlist (edit the emails below before running,
---     or run 0003 later to change them)
+--   - Owner/teacher email allowlist (edit before running if needed)
 --   - 10 placeholder parody companies with seeded AMM liquidity pools
 --   - A starter pool of random market event templates
 --
--- Run this once, after 0001_schema.sql, on a fresh project.
+-- Run this once, after db/schema.sql, on a fresh database.
 -- ============================================================================
 
 -- ----------------------------------------------------------------------------
 -- Admin allowlist
--- Whoever signs up (through the normal signup form) with one of these email
--- addresses is automatically granted that role instead of 'student'.
+-- Whoever signs up (through the normal signup form) and enters one of these
+-- email addresses in the optional "teacher/admin email" field is
+-- automatically granted that role instead of 'student'. Login is still
+-- always by username -- this is only checked once, at signup.
 -- ----------------------------------------------------------------------------
 
 insert into admin_allowlist (email, role) values
@@ -77,7 +78,7 @@ select id, round(pool_cash / pool_shares, 6) from companies;
 -- ----------------------------------------------------------------------------
 -- Random market event templates
 -- Placeholders: {company}, {sector}, {pct}, {amount} get substituted by
--- trigger_market_event() when an event actually fires.
+-- src/lib/services/events.ts when an event actually fires.
 -- ----------------------------------------------------------------------------
 
 insert into event_templates
@@ -121,5 +122,4 @@ values
 
   ('cash_tax', 'Emergency "market maintenance fee"',
    'The exchange needs to cover its server costs (a lie). Every trader is taxed {amount}.',
-   null, null, 25, 100, 1, true)
-on conflict do nothing;
+   null, null, 25, 100, 1, true);

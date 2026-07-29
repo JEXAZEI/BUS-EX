@@ -1,37 +1,35 @@
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { asc, desc, gte } from "drizzle-orm";
+import { db } from "@/lib/db/client";
+import { companies as companiesTable, events as eventsTable, priceHistory } from "@/lib/db/schema";
+import { toCompany, toMarketEvent } from "@/lib/db/mappers";
 import { NewsTicker } from "@/components/NewsTicker";
-import type { Company } from "@/lib/supabase/types";
-import { companyPrice } from "@/lib/supabase/types";
+import type { Company } from "@/lib/types";
+import { companyPrice } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const supabase = await createClient();
-
-  const [{ data: companies }, { data: events }] = await Promise.all([
-    supabase.from("companies").select("*").order("sector").order("name"),
-    supabase
-      .from("events")
-      .select("id, event_type, title, description, created_at")
-      .order("created_at", { ascending: false })
-      .limit(20),
+  const [companyRows, eventRows] = await Promise.all([
+    db.select().from(companiesTable).orderBy(asc(companiesTable.sector), asc(companiesTable.name)),
+    db.select().from(eventsTable).orderBy(desc(eventsTable.createdAt)).limit(20),
   ]);
 
-  const companyList = (companies ?? []) as Company[];
+  const companyList: Company[] = companyRows.map(toCompany);
+  const events = eventRows.map(toMarketEvent);
 
-  let baselineByCompany = new Map<string, number>();
+  const baselineByCompany = new Map<string, number>();
   if (companyList.length > 0) {
-    const since = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
-    const { data: history } = await supabase
-      .from("price_history")
-      .select("company_id, price, recorded_at")
-      .gte("recorded_at", since)
-      .order("recorded_at", { ascending: true });
+    const since = new Date(Date.now() - 25 * 60 * 60 * 1000);
+    const history = await db
+      .select()
+      .from(priceHistory)
+      .where(gte(priceHistory.recordedAt, since))
+      .orderBy(asc(priceHistory.recordedAt));
 
-    for (const row of history ?? []) {
-      if (!baselineByCompany.has(row.company_id)) {
-        baselineByCompany.set(row.company_id, row.price);
+    for (const row of history) {
+      if (!baselineByCompany.has(row.companyId)) {
+        baselineByCompany.set(row.companyId, parseFloat(row.price));
       }
     }
   }
@@ -45,7 +43,7 @@ export default async function DashboardPage() {
 
   return (
     <div>
-      <NewsTicker initialEvents={events ?? []} />
+      <NewsTicker initialEvents={events} />
 
       <h1 className="mb-4 text-xl font-bold">Market</h1>
 

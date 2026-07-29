@@ -1,11 +1,16 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { z } from "zod";
+import { getCurrentProfile } from "@/lib/session";
+import { adminSetStartingCash, AdminError } from "@/lib/services/admin";
 
 const schema = z.object({ startingCash: z.number().positive().max(10_000_000) });
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
+  const profile = await getCurrentProfile();
+  if (!profile || (profile.role !== "teacher" && profile.role !== "owner")) {
+    return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+  }
+
   let body: unknown;
   try {
     body = await request.json();
@@ -18,13 +23,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   }
 
-  const { error } = await supabase.rpc("admin_set_starting_cash", {
-    p_amount: parsed.data.startingCash,
-  });
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
+  try {
+    await adminSetStartingCash(parsed.data.startingCash);
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    if (err instanceof AdminError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
+    throw err;
   }
-
-  return NextResponse.json({ ok: true });
 }

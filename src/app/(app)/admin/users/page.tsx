@@ -1,18 +1,18 @@
+import { asc } from "drizzle-orm";
 import { requireOwner } from "@/lib/session";
-import { createClient } from "@/lib/supabase/server";
+import { db } from "@/lib/db/client";
+import { users as usersTable } from "@/lib/db/schema";
+import { toProfile } from "@/lib/db/mappers";
 import { UserRow } from "@/components/admin/UserRow";
-import type { Profile } from "@/lib/supabase/types";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminUsersPage() {
   await requireOwner();
-  const supabase = await createClient();
-  const { data: users } = await supabase
-    .from("profiles")
-    .select("*")
-    .order("role")
-    .order("username");
+  const rows = await db
+    .select()
+    .from(usersTable)
+    .orderBy(asc(usersTable.role), asc(usersTable.username));
 
   return (
     <div className="space-y-4">
@@ -22,7 +22,7 @@ export default async function AdminUsersPage() {
       </div>
 
       <div className="space-y-2">
-        {((users ?? []) as Profile[]).map((u) => (
+        {rows.map(toProfile).map((u) => (
           <UserRow key={u.id} user={u} />
         ))}
       </div>

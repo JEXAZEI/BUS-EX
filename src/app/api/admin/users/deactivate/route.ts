@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
-import { getCurrentProfile } from "@/lib/session";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { z } from "zod";
+import { getCurrentProfile } from "@/lib/session";
+import { setUserActive } from "@/lib/services/users";
 
 const schema = z.object({ userId: z.string().uuid(), active: z.boolean() });
 
 // Owner-only. Soft "remove" -- disables login/trading but preserves trade
-// history for grading/audit. Uses the service-role key, so the caller's
-// role is checked explicitly here rather than relying on RLS.
+// history for grading/audit.
 export async function POST(request: Request) {
   const profile = await getCurrentProfile();
   if (!profile || profile.role !== "owner") {
@@ -29,15 +28,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "You can't deactivate your own account" }, { status: 400 });
   }
 
-  const admin = createAdminClient();
-  const { error } = await admin
-    .from("profiles")
-    .update({ is_active: parsed.data.active })
-    .eq("id", parsed.data.userId);
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
-  }
-
+  await setUserActive(parsed.data.userId, parsed.data.active);
   return NextResponse.json({ ok: true });
 }

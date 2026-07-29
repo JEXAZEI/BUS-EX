@@ -1,15 +1,13 @@
 import { NextResponse } from "next/server";
-import { getCurrentProfile } from "@/lib/session";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { passwordSchema } from "@/lib/validation";
 import { z } from "zod";
+import { getCurrentProfile } from "@/lib/session";
+import { resetUserPassword } from "@/lib/services/users";
+import { passwordSchema } from "@/lib/validation";
 
 const schema = z.object({ userId: z.string().uuid(), newPassword: passwordSchema });
 
-// Owner-only. This uses the service-role key to directly set a user's auth
-// password, which bypasses RLS/Postgres-level checks entirely -- so this
-// route must independently verify the caller's role itself before doing
-// anything, rather than relying on a database policy.
+// Owner-only. Directly sets a user's password hash, bypassing the normal
+// login flow -- the caller's role is checked explicitly here.
 export async function POST(request: Request) {
   const profile = await getCurrentProfile();
   if (!profile || profile.role !== "owner") {
@@ -31,14 +29,6 @@ export async function POST(request: Request) {
     );
   }
 
-  const admin = createAdminClient();
-  const { error } = await admin.auth.admin.updateUserById(parsed.data.userId, {
-    password: parsed.data.newPassword,
-  });
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
-  }
-
+  await resetUserPassword(parsed.data.userId, parsed.data.newPassword);
   return NextResponse.json({ ok: true });
 }

@@ -1,11 +1,16 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { z } from "zod";
+import { getCurrentProfile } from "@/lib/session";
+import { adminSetCompanyDelisted } from "@/lib/services/admin";
 
 const schema = z.object({ companyId: z.string().uuid(), delisted: z.boolean() });
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
+  const profile = await getCurrentProfile();
+  if (!profile || (profile.role !== "teacher" && profile.role !== "owner")) {
+    return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+  }
+
   let body: unknown;
   try {
     body = await request.json();
@@ -18,14 +23,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   }
 
-  const { error } = await supabase.rpc("admin_set_company_delisted", {
-    p_company_id: parsed.data.companyId,
-    p_delisted: parsed.data.delisted,
-  });
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
-  }
-
+  await adminSetCompanyDelisted(parsed.data.companyId, parsed.data.delisted);
   return NextResponse.json({ ok: true });
 }

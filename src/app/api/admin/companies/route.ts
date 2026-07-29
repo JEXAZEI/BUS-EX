@@ -1,9 +1,14 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentProfile } from "@/lib/session";
 import { companyUpsertSchema } from "@/lib/validation";
+import { adminUpsertCompany, AdminError } from "@/lib/services/admin";
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
+  const profile = await getCurrentProfile();
+  if (!profile || (profile.role !== "teacher" && profile.role !== "owner")) {
+    return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+  }
+
   let body: unknown;
   try {
     body = await request.json();
@@ -20,21 +25,25 @@ export async function POST(request: Request) {
   }
   const c = parsed.data;
 
-  // admin_upsert_company itself checks is_admin() and rejects non-admins --
-  // this route just forwards the call, the DB is the real authority.
-  const { data, error } = await supabase.rpc("admin_upsert_company", {
-    p_id: c.id,
-    p_name: c.name,
-    p_ticker: c.ticker,
-    p_description: c.description ?? "",
-    p_sector: c.sector,
-    p_starting_pool_cash: c.startingPoolCash,
-    p_starting_pool_shares: c.startingPoolShares,
-  });
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
+  try {
+    const id = await adminUpsertCompany({
+      id: c.id,
+      name: c.name,
+      ticker: c.ticker,
+      description: c.description ?? "",
+      sector: c.sector,
+      startingPoolCash: c.startingPoolCash,
+      startingPoolShares: c.startingPoolShares,
+    });
+    return NextResponse.json({ ok: true, id });
+  } catch (err) {
+    if (err instanceof AdminError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
+    if (err instanceof Error && "code" in err && (err as { code?: string }).code === "23505") {
+      return NextResponse.json({ error: "That ticker is already in use" }, { status: 409 });
+    }
+    console.error("Company upsert failed:", err);
+    return NextResponse.json({ error: "Failed to save company" }, { status: 500 });
   }
-
-  return NextResponse.json({ ok: true, id: data });
 }

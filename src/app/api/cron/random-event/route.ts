@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { runMarketEvent, EventError } from "@/lib/services/events";
 
 // Hit on a schedule by Vercel Cron (see vercel.json) to fire a random
 // market event automatically, satisfying "periodically, on a timer" from
 // the spec, in addition to the teacher's manual trigger button in /admin.
 // Protected by a shared secret rather than a user session, since Vercel
-// Cron requests carry no browser cookies.
+// Cron requests carry no browser cookies. triggeredBy is null so the event
+// feed reads as "the market" rather than any specific person.
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;
   if (!secret) {
@@ -17,14 +18,14 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const admin = createAdminClient();
-  const { data, error } = await admin.rpc("trigger_market_event_system", {
-    p_template_id: null,
-  });
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  try {
+    const eventId = await runMarketEvent(null, null);
+    return NextResponse.json({ ok: true, eventId });
+  } catch (err) {
+    if (err instanceof EventError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
+    console.error("Scheduled event failed:", err);
+    return NextResponse.json({ error: "Failed to trigger event" }, { status: 500 });
   }
-
-  return NextResponse.json({ ok: true, eventId: data });
 }

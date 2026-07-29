@@ -1,36 +1,45 @@
 import { notFound } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { and, desc, eq } from "drizzle-orm";
+import { db } from "@/lib/db/client";
+import { companies as companiesTable, holdings, priceHistory } from "@/lib/db/schema";
+import { toCompany } from "@/lib/db/mappers";
 import { getCurrentProfile } from "@/lib/session";
+import { recentCompanyTrades } from "@/lib/services/trades";
 import { PriceChart } from "@/components/PriceChart";
 import { TradeForm } from "@/components/TradeForm";
-import type { Company } from "@/lib/supabase/types";
-import { companyPrice } from "@/lib/supabase/types";
+import { companyPrice } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
 export default async function CompanyPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const supabase = await createClient();
   const profile = await getCurrentProfile();
   if (!profile) notFound();
 
-  const [{ data: company }, { data: history }, { data: recentTrades }, { data: holding }] =
-    await Promise.all([
-      supabase.from("companies").select("*").eq("id", id).maybeSingle(),
-      supabase
-        .from("price_history")
-        .select("price, recorded_at")
-        .eq("company_id", id)
-        .order("recorded_at", { ascending: false })
-        .limit(200),
-      supabase.rpc("recent_company_trades", { p_company_id: id, p_limit: 20 }),
-      supabase.from("holdings").select("shares").eq("company_id", id).eq("user_id", profile.id).maybeSingle(),
-    ]);
+  const [companyRows, historyRows, recentTrades, holdingRows] = await Promise.all([
+    db.select().from(companiesTable).where(eq(companiesTable.id, id)).limit(1),
+    db
+      .select({ price: priceHistory.price, recorded_at: priceHistory.recordedAt })
+      .from(priceHistory)
+      .where(eq(priceHistory.companyId, id))
+      .orderBy(desc(priceHistory.recordedAt))
+      .limit(200),
+    recentCompanyTrades(id, 20),
+    db
+      .select({ shares: holdings.shares })
+      .from(holdings)
+      .where(and(eq(holdings.companyId, id), eq(holdings.userId, profile.id)))
+      .limit(1),
+  ]);
 
-  if (!company) notFound();
-  const typedCompany = company as Company;
+  const companyRow = companyRows[0];
+  if (!companyRow) notFound();
+  const typedCompany = toCompany(companyRow);
   const price = companyPrice(typedCompany);
-  const chartData = [...(history ?? [])].reverse();
+  const chartData = [...historyRows]
+    .reverse()
+    .map((h) => ({ price: parseFloat(h.price), recorded_at: h.recorded_at.toISOString() }));
+  const holdingShares = holdingRows[0] ? parseFloat(holdingRows[0].shares) : 0;
 
   return (
     <div className="space-y-4">
@@ -59,18 +68,18 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
         poolShares={typedCompany.pool_shares}
         isDelisted={typedCompany.is_delisted}
         userCashBalance={profile.cash_balance}
-        userShares={holding?.shares ?? 0}
+        userShares={holdingShares}
       />
 
       <div className="card">
         <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-500">
           Recent market activity
         </h2>
-        {!recentTrades || recentTrades.length === 0 ? (
+        {recentTrades.length === 0 ? (
           <p className="text-sm text-gray-400">No trades yet.</p>
         ) : (
           <ul className="divide-y divide-gray-100 text-sm">
-            {recentTrades.map((t: { side: string; shares: number; price_per_share: number; created_at: string }, i: number) => (
+            {recentTrades.map((t, i) => (
               <li key={i} className="flex items-center justify-between py-1.5">
                 <span className={t.side === "buy" ? "text-up" : "text-down"}>
                   {t.side === "buy" ? "Buy" : "Sell"} {t.shares.toFixed(2)} sh

@@ -60,8 +60,3 @@ export const companyUpsertSchema = z.object({
   startingPoolCash: z.number().positive().max(100_000_000),
   startingPoolShares: z.number().positive().max(100_000_000),
 });
-
-export function synthesizeStudentEmail(username: string): string {
-  const domain = process.env.STUDENT_EMAIL_DOMAIN || "students.bus-ex.local";
-  return `${username.toLowerCase()}@${domain}`;
-}

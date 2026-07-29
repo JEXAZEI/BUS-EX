@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentProfile } from "@/lib/session";
+import { resetGame } from "@/lib/services/admin";
 
 export async function POST() {
-  const supabase = await createClient();
-  const { error } = await supabase.rpc("reset_game");
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
+  const profile = await getCurrentProfile();
+  if (!profile || (profile.role !== "teacher" && profile.role !== "owner")) {
+    return NextResponse.json({ error: "Admin access required" }, { status: 403 });
   }
 
+  await resetGame();
   return NextResponse.json({ ok: true });
 }

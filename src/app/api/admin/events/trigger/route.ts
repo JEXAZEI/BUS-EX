@@ -1,11 +1,16 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { z } from "zod";
+import { getCurrentProfile } from "@/lib/session";
+import { runMarketEvent, EventError } from "@/lib/services/events";
 
 const schema = z.object({ templateId: z.string().uuid().nullable().optional() });
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
+  const profile = await getCurrentProfile();
+  if (!profile || (profile.role !== "teacher" && profile.role !== "owner")) {
+    return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+  }
+
   let body: unknown = {};
   try {
     body = await request.json();
@@ -18,13 +23,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   }
 
-  const { data, error } = await supabase.rpc("trigger_market_event", {
-    p_template_id: parsed.data.templateId ?? null,
-  });
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
+  try {
+    const eventId = await runMarketEvent(parsed.data.templateId ?? null, profile.id);
+    return NextResponse.json({ ok: true, eventId });
+  } catch (err) {
+    if (err instanceof EventError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
+    console.error("Event trigger failed:", err);
+    return NextResponse.json({ error: "Failed to trigger event" }, { status: 500 });
   }
-
-  return NextResponse.json({ ok: true, eventId: data });
 }
