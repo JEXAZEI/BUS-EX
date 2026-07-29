@@ -1,24 +1,13 @@
 -- ============================================================================
 -- BUS-EX: seed data
---   - Owner/teacher email allowlist (edit before running if needed)
 --   - 10 placeholder parody companies with seeded AMM liquidity pools
 --   - A starter pool of random market event templates
 --
--- Run this once, after db/schema.sql, on a fresh database.
+-- Run this once, after db/schema.sql, on a fresh database. Teacher/owner
+-- accounts are NOT created here -- see the "Pre-creating admin accounts"
+-- section of the README for the insert statement that creates them with a
+-- properly bcrypt-hashed password.
 -- ============================================================================
-
--- ----------------------------------------------------------------------------
--- Admin allowlist
--- Whoever signs up (through the normal signup form) and enters one of these
--- email addresses in the optional "teacher/admin email" field is
--- automatically granted that role instead of 'student'. Login is still
--- always by username -- this is only checked once, at signup.
--- ----------------------------------------------------------------------------
-
-insert into admin_allowlist (email, role) values
-  ('ar9654@susd12.org', 'owner'),
-  ('anad@susd12.org', 'teacher')
-on conflict (email) do update set role = excluded.role;
 
 -- ----------------------------------------------------------------------------
 -- Companies (10 parody / joke brands across 4 sectors)

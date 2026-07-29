@@ -1,32 +1,25 @@
 import { z } from "zod";
 
-// Usernames: alphanumeric + underscore/hyphen only. This blocks any HTML/JS
-// payload from ever being stored as a username (defense against stored XSS),
-// independent of output-encoding, which React/Next also does automatically
-// by default when rendering text.
+// Usernames: letters, numbers, and common email-safe punctuation (admin
+// accounts use their email address as their username). This still blocks
+// any HTML/JS payload from ever being stored as a username (defense against
+// stored XSS), independent of output-encoding, which React/Next also does
+// automatically by default when rendering text.
 export const usernameSchema = z
   .string()
   .trim()
   .min(3, "Username must be at least 3 characters")
-  .max(20, "Username must be at most 20 characters")
-  .regex(/^[a-zA-Z0-9_-]+$/, "Username can only contain letters, numbers, - and _");
+  .max(50, "Username must be at most 50 characters")
+  .regex(/^[a-zA-Z0-9._%+-]+$/, "Username can only contain letters, numbers, and . _ % + -");
 
 export const passwordSchema = z
   .string()
   .min(8, "Password must be at least 8 characters")
   .max(72, "Password must be at most 72 characters");
 
-export const emailSchema = z
-  .string()
-  .trim()
-  .toLowerCase()
-  .email("Enter a valid email address")
-  .max(254);
-
 export const signupSchema = z.object({
   username: usernameSchema,
   password: passwordSchema,
-  adminEmail: z.union([emailSchema, z.literal("")]).optional(),
 });
 
 export const loginSchema = z.object({

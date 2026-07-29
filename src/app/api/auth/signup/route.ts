@@ -20,10 +20,9 @@ export async function POST(request: Request) {
   }
 
   const { username, password } = parsed.data;
-  const adminEmail = parsed.data.adminEmail?.trim() || null;
 
   try {
-    const user = await signupUser(username, password, adminEmail);
+    const user = await signupUser(username, password);
     const token = await createSession(user.id);
     await setSessionCookie(token);
     return NextResponse.json({ ok: true }, { status: 200 });

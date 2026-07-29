@@ -33,12 +33,6 @@ export const gameSettings = pgTable("game_settings", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const adminAllowlist = pgTable("admin_allowlist", {
-  email: text("email").primaryKey(),
-  role: userRole("role").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
-
 export const users = pgTable(
   "users",
   {
@@ -46,7 +40,6 @@ export const users = pgTable(
     username: text("username").notNull().unique(),
     passwordHash: text("password_hash").notNull(),
     role: userRole("role").notNull().default("student"),
-    adminEmail: text("admin_email"),
     cashBalance: numeric("cash_balance", { precision: 14, scale: 2 }).notNull().default("1000"),
     isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

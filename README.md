@@ -39,19 +39,44 @@ does the reverse. This means:
 1. Go to [neon.tech](https://neon.tech) and create a free account/project (the free tier allows generous usage with no cap on the number of projects, unlike some other providers).
 2. In the Neon dashboard, open the **SQL Editor** and run, in order:
    - `db/schema.sql` (tables, indexes, constraints)
-   - `db/seed.sql` (starter companies, event templates, admin allowlist)
-3. Before running `db/seed.sql`, double-check the `admin_allowlist` insert at
-   the top — it currently grants:
-   - `ar9654@susd12.org` → **owner**
-   - `anad@susd12.org` → **teacher**
-
-   Edit those emails first if you want different accounts. You can also add
-   more allowlisted emails later by inserting into `admin_allowlist` directly
-   in the SQL editor — no redeploy needed. This email is only ever checked
-   once, at signup, against an optional field on the signup form — login
-   itself is always by username, there's no real email/inbox involved.
+   - `db/seed.sql` (starter companies, event templates)
+3. Pre-create your Teacher and Owner accounts (see "Pre-creating admin
+   accounts" below) — the public signup form only ever creates plain student
+   accounts, so admin accounts need to be inserted directly.
 4. Copy the **pooled connection string** from Neon's Connection Details panel
    (it looks like `postgres://user:password@ep-xxxx.neon.tech/dbname?sslmode=require`) — this is your `DATABASE_URL`.
+
+### 1.1b Pre-creating admin accounts
+
+Teacher/owner accounts aren't self-service — there's no field on the signup
+form for them. Instead, create them directly with a bcrypt-hashed password:
+
+1. Generate a hash for the password you want, using the same hashing the app
+   uses (12 salt rounds):
+   ```bash
+   node -e "console.log(require('bcryptjs').hashSync('YOUR_PASSWORD_HERE', 12))"
+   ```
+   (Run this from the project directory after `npm install`, so `bcryptjs` is
+   available.)
+2. In Neon's SQL Editor, run:
+   ```sql
+   insert into users (username, password_hash, role, cash_balance)
+   values ('YOUR_USERNAME_HERE', 'PASTE_THE_HASH_HERE', 'owner', 1000);
+   ```
+   Use `'teacher'` instead of `'owner'` for the teacher account. Username can
+   be anything unique (an email address works fine, or a plain name) — it's
+   just what you type into the login form, there's no real inbox involved.
+3. Log in at `/login` with that username and password.
+
+To add more admins later (e.g. a co-teacher), repeat step 2 with a new
+username/role. To change an existing admin's password later, generate a new
+hash and `update users set password_hash = '...' where username = '...';`.
+
+**Don't commit real password hashes to a public repo.** Even though bcrypt
+hashes aren't trivially reversible, a hash of a weak/guessable password (like
+a short dictionary word) can still be cracked offline given enough attempts.
+Run the hash-generation command locally and paste the result only into
+Neon's SQL editor, never into a file you `git commit`.
 
 ### 1.2 Configure the app
 
@@ -69,11 +94,10 @@ npm install
 npm run dev
 ```
 
-Visit `http://localhost:3000`. Sign up once, entering `ar9654@susd12.org` (or
-whichever email you put in the owner allowlist) in the "teacher/admin email"
-field, to get the Owner role, and once with the teacher email for the Teacher
-role. Everyone else who signs up with that field blank becomes a regular
-student.
+Visit `http://localhost:3000`. Log in with the owner/teacher username and
+password you created in "Pre-creating admin accounts" above. Everyone else
+(your classmates) creates their own account through `/signup`, which always
+makes a regular student account.
 
 ### 1.4 Deploy for free
 
@@ -172,11 +196,10 @@ Handlers under `/api`), so exposure is low, but you should periodically run
 | Teacher | add/edit/delist | trigger | adjust starting cash | yes | — |
 | Owner | add/edit/delist | trigger | adjust starting cash | yes | reset passwords, deactivate/delete accounts |
 
-Roles are assigned automatically at signup via the `admin_allowlist` table —
-whoever signs up with an allowlisted email (entered in the optional
-"teacher/admin email" field) gets that role; everyone else is a student. Add
-more teachers by inserting more rows into `admin_allowlist` in the Neon SQL
-editor.
+The public `/signup` form always creates a student account. Teacher/owner
+accounts are pre-created directly with a SQL insert (see "Pre-creating admin
+accounts" in section 1) — add more teachers the same way, any time, with no
+redeploy needed.
 
 ## 4. Resetting the game for a new class term
 
@@ -218,7 +241,7 @@ title/description templates get substituted automatically. See
 ```
 db/
   schema.sql                           -- tables, indexes, constraints (run first)
-  seed.sql                             -- allowlist, starter companies, event templates
+  seed.sql                             -- starter companies, event templates
 src/
   app/
     (auth)/login, (auth)/signup        -- public auth pages

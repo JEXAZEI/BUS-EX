@@ -8,7 +8,6 @@ export default function SignupPage() {
   const router = useRouter();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [adminEmail, setAdminEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -20,7 +19,7 @@ export default function SignupPage() {
       const res = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password, adminEmail }),
+        body: JSON.stringify({ username, password }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -50,9 +49,9 @@ export default function SignupPage() {
             autoComplete="username"
             required
             minLength={3}
-            maxLength={20}
-            pattern="[a-zA-Z0-9_-]+"
-            title="Letters, numbers, - and _ only"
+            maxLength={50}
+            pattern="[a-zA-Z0-9._%+-]+"
+            title="Letters, numbers, and . _ % + - only"
           />
         </div>
         <div>
@@ -69,20 +68,6 @@ export default function SignupPage() {
             maxLength={72}
           />
           <p className="mt-1 text-xs text-gray-400">At least 8 characters.</p>
-        </div>
-        <div>
-          <label className="label" htmlFor="adminEmail">
-            Teacher/admin email <span className="font-normal text-gray-400">(leave blank if you&apos;re a student)</span>
-          </label>
-          <input
-            id="adminEmail"
-            type="email"
-            className="input"
-            value={adminEmail}
-            onChange={(e) => setAdminEmail(e.target.value)}
-            autoComplete="email"
-            maxLength={254}
-          />
         </div>
         {error && <p className="text-sm text-red-600">{error}</p>}
         <button type="submit" className="btn-primary w-full" disabled={loading}>

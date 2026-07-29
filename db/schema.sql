@@ -39,26 +39,16 @@ create table game_settings (
 
 insert into game_settings (id, default_starting_cash) values (1, 1000);
 
--- Emails that should be granted teacher/owner role on signup, instead of the
--- default student role. Managed by the owner directly in this table (via
--- the Neon SQL editor, or a future admin UI). Matched against the optional
--- "admin email" field on the signup form -- login itself is always by
--- username, this is only used once, at signup, to decide the account's role.
-create table admin_allowlist (
-  email text primary key,
-  role user_role not null check (role in ('teacher', 'owner')),
-  created_at timestamptz not null default now()
-);
-
 -- Every account: student, teacher, or owner. This is the app's own auth
 -- table (no external auth provider) -- password_hash is a bcrypt hash,
--- never a plaintext password.
+-- never a plaintext password. Public signup always creates a 'student'
+-- account; teacher/owner accounts are pre-created directly with an insert
+-- statement (see README) rather than self-assigned through the signup form.
 create table users (
   id uuid primary key default gen_random_uuid(),
   username text not null unique,
   password_hash text not null,
   role user_role not null default 'student',
-  admin_email text,
   cash_balance numeric(14, 2) not null default 1000,
   is_active boolean not null default true,
   created_at timestamptz not null default now()
