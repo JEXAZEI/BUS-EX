@@ -84,13 +84,13 @@ student.
 4. Deploy. That's it — no server to manage.
 
 **Optional: scheduled random events.** `vercel.json` defines a cron job that
-hits `/api/cron/random-event` once an hour to fire a random market event
-automatically, in addition to the teacher's manual "fire event" button in
-`/admin`. To enable it, set `CRON_SECRET` in Vercel (any long random string)
-— the route checks it and does nothing without it. Note: Vercel's free Hobby
-plan limits how often cron jobs can run (currently once a day); the manual
-trigger in the admin panel always works regardless, so scheduled events are a
-nice-to-have, not a requirement.
+hits `/api/cron/random-event` once a day (at 16:00 UTC, adjust to taste) to
+fire a random market event automatically, in addition to the teacher's manual
+"fire event" button in `/admin`. To enable it, set `CRON_SECRET` in Vercel
+(any long random string) — the route checks it and does nothing without it.
+Vercel's free Hobby plan only allows daily cron jobs (not hourly), which is
+why it's scheduled once a day; the manual trigger in the admin panel always
+works regardless, so scheduled events are a nice-to-have, not a requirement.
 
 ---
 
