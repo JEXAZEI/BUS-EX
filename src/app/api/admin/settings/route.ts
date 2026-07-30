@@ -7,7 +7,7 @@ const schema = z.object({ startingCash: z.number().positive().max(10_000_000) })
 
 export async function POST(request: Request) {
   const profile = await getCurrentProfile();
-  if (!profile || (profile.role !== "teacher" && profile.role !== "owner")) {
+  if (!profile || !profile.is_active || (profile.role !== "teacher" && profile.role !== "owner")) {
     return NextResponse.json({ error: "Admin access required" }, { status: 403 });
   }
 

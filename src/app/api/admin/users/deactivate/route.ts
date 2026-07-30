@@ -9,7 +9,7 @@ const schema = z.object({ userId: z.string().uuid(), active: z.boolean() });
 // history for grading/audit.
 export async function POST(request: Request) {
   const profile = await getCurrentProfile();
-  if (!profile || profile.role !== "owner") {
+  if (!profile || !profile.is_active || profile.role !== "owner") {
     return NextResponse.json({ error: "Owner access required" }, { status: 403 });
   }
 

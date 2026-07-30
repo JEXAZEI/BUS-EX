@@ -51,7 +51,7 @@ function LoginForm() {
             onChange={(e) => setUsername(e.target.value)}
             autoComplete="username"
             required
-            maxLength={20}
+            maxLength={50}
           />
         </div>
         <div>

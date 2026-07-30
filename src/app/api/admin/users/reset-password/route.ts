@@ -10,7 +10,7 @@ const schema = z.object({ userId: z.string().uuid(), newPassword: passwordSchema
 // login flow -- the caller's role is checked explicitly here.
 export async function POST(request: Request) {
   const profile = await getCurrentProfile();
-  if (!profile || profile.role !== "owner") {
+  if (!profile || !profile.is_active || profile.role !== "owner") {
     return NextResponse.json({ error: "Owner access required" }, { status: 403 });
   }
 

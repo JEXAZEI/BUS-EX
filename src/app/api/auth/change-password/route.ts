@@ -11,7 +11,7 @@ const schema = z.object({
 
 export async function POST(request: Request) {
   const profile = await getCurrentProfile();
-  if (!profile) {
+  if (!profile || !profile.is_active) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 

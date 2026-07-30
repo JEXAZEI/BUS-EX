@@ -5,7 +5,7 @@ import { adminUpsertCompany, AdminError } from "@/lib/services/admin";
 
 export async function POST(request: Request) {
   const profile = await getCurrentProfile();
-  if (!profile || (profile.role !== "teacher" && profile.role !== "owner")) {
+  if (!profile || !profile.is_active || (profile.role !== "teacher" && profile.role !== "owner")) {
     return NextResponse.json({ error: "Admin access required" }, { status: 403 });
   }
 

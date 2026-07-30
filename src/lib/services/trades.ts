@@ -49,12 +49,13 @@ export async function executeTrade(
       throw new TradeError("This company is currently delisted and cannot be traded");
     }
 
-    const userRes = await client.query<{ cash_balance: string; role: string }>(
-      `select cash_balance, role from users where id = $1 for update`,
+    const userRes = await client.query<{ cash_balance: string; role: string; is_active: boolean }>(
+      `select cash_balance, role, is_active from users where id = $1 for update`,
       [userId]
     );
     const user = userRes.rows[0];
     if (!user) throw new TradeError("Profile not found");
+    if (!user.is_active) throw new TradeError("This account has been disabled");
     if (user.role !== "student") {
       throw new TradeError("Teacher and owner accounts cannot buy or sell shares");
     }

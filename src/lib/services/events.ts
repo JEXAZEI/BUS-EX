@@ -26,9 +26,20 @@ export function randomInRange(min: number, max: number): number {
 }
 
 /**
- * Shifts a company's spot price by `impactPct` while keeping the AMM
- * invariant pool_cash * pool_shares constant. Shared by admin/random market
- * events and by the ambient background drift in src/lib/services/drift.ts.
+ * Shifts a company's spot price by `impactPct` by rescaling pool_cash only
+ * (pool_shares is left untouched). Shared by admin/random market events and
+ * by the ambient background drift in src/lib/services/drift.ts.
+ *
+ * pool_shares is never touched here because it's share-conservation
+ * accounting -- pool_shares + everyone's holdings must always add up to
+ * total_shares, which is only true for real trades (executeTrade in
+ * trades.ts). A price shock has no counterparty and no shares actually
+ * change hands, so scaling pool_shares here (an earlier version did, via
+ * sqrt(factor) on both sides to hold pool_cash * pool_shares constant)
+ * could push pool_shares above total_shares -- companies start with
+ * pool_shares === total_shares, so even one negative-impact tick could
+ * violate the DB's pool_shares <= total_shares check constraint and
+ * silently break that company's price updates from then on.
  */
 export async function applyPriceShock(
   client: PoolClient,
@@ -48,16 +59,14 @@ export async function applyPriceShock(
 
   const poolCash = parseFloat(company.pool_cash);
   const poolShares = parseFloat(company.pool_shares);
-  const sqrtFactor = Math.sqrt(factor);
-  const newPoolCash = poolCash * sqrtFactor;
-  const newPoolShares = poolShares / sqrtFactor;
+  const newPoolCash = poolCash * factor;
 
   await client.query(
-    `update companies set pool_cash = $1, pool_shares = $2, updated_at = now() where id = $3`,
-    [newPoolCash, newPoolShares, companyId]
+    `update companies set pool_cash = $1, updated_at = now() where id = $2`,
+    [newPoolCash, companyId]
   );
 
-  const newPrice = round(newPoolCash / newPoolShares, 6);
+  const newPrice = round(newPoolCash / poolShares, 6);
   // recordedAt defaults to "now" for a normal admin/random event, but
   // ambient drift's catch-up backfill (drift.ts) passes historical
   // timestamps so a long-idle company's chart fills in with realistic
@@ -108,6 +117,13 @@ export async function runMarketEvent(
     }
     if (!template) throw new EventError("No event template available");
 
+    const requireRange = (min: string | null, max: string | null, label: string): [number, number] => {
+      if (min === null || max === null) {
+        throw new EventError(`Event template is missing ${label} and can't be used`);
+      }
+      return [parseFloat(min), parseFloat(max)];
+    };
+
     let title = "";
     let description = "";
     let affected: string[] = [];
@@ -130,8 +146,7 @@ export async function runMarketEvent(
 
       if (template.event_type === "price_shock") {
         impactPct = randomInRange(
-          parseFloat(template.min_impact_pct!),
-          parseFloat(template.max_impact_pct!)
+          ...requireRange(template.min_impact_pct, template.max_impact_pct, "min/max impact %")
         );
         await applyPriceShock(client, company.id, impactPct);
         title = substitute(template.title_template, { company: company.name });
@@ -162,8 +177,7 @@ export async function runMarketEvent(
       if (!sector) throw new EventError("No eligible sector for this event");
 
       impactPct = randomInRange(
-        parseFloat(template.min_impact_pct!),
-        parseFloat(template.max_impact_pct!)
+        ...requireRange(template.min_impact_pct, template.max_impact_pct, "min/max impact %")
       );
 
       const companiesRes = await client.query<{ id: string }>(
@@ -181,7 +195,10 @@ export async function runMarketEvent(
         pct: `${(impactPct * 100).toFixed(1)}%`,
       });
     } else if (template.event_type === "cash_bonus" || template.event_type === "cash_tax") {
-      cashAmount = round(randomInRange(parseFloat(template.min_cash!), parseFloat(template.max_cash!)), 2);
+      cashAmount = round(
+        randomInRange(...requireRange(template.min_cash, template.max_cash, "min/max cash")),
+        2
+      );
       if (template.event_type === "cash_tax") {
         await client.query(
           `update users set cash_balance = greatest(cash_balance - $1, 0) where role = 'student' and is_active`,

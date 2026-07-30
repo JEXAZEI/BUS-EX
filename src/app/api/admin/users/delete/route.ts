@@ -10,7 +10,7 @@ const schema = z.object({ userId: z.string().uuid() });
 // student dropped the class" cases -- this can't be undone.
 export async function POST(request: Request) {
   const profile = await getCurrentProfile();
-  if (!profile || profile.role !== "owner") {
+  if (!profile || !profile.is_active || profile.role !== "owner") {
     return NextResponse.json({ error: "Owner access required" }, { status: 403 });
   }
 
