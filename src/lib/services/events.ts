@@ -33,7 +33,8 @@ export function randomInRange(min: number, max: number): number {
 export async function applyPriceShock(
   client: PoolClient,
   companyId: string,
-  impactPct: number
+  impactPct: number,
+  recordedAt: Date = new Date()
 ): Promise<number | null> {
   const res = await client.query<{ pool_cash: string; pool_shares: string; is_delisted: boolean }>(
     `select pool_cash, pool_shares, is_delisted from companies where id = $1 for update`,
@@ -57,9 +58,14 @@ export async function applyPriceShock(
   );
 
   const newPrice = round(newPoolCash / newPoolShares, 6);
-  await client.query(`insert into price_history (company_id, price) values ($1, $2)`, [
+  // recordedAt defaults to "now" for a normal admin/random event, but
+  // ambient drift's catch-up backfill (drift.ts) passes historical
+  // timestamps so a long-idle company's chart fills in with realistic
+  // intermediate points instead of one point dated "now".
+  await client.query(`insert into price_history (company_id, price, recorded_at) values ($1, $2, $3)`, [
     companyId,
     newPrice,
+    recordedAt,
   ]);
 
   return newPrice;
