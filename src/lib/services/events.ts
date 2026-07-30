@@ -16,16 +16,21 @@ interface TemplateRow {
   max_cash: string | null;
 }
 
-function round(n: number, decimals: number): number {
+export function round(n: number, decimals: number): number {
   const f = 10 ** decimals;
   return Math.round(n * f) / f;
 }
 
-function randomInRange(min: number, max: number): number {
+export function randomInRange(min: number, max: number): number {
   return min + Math.random() * (max - min);
 }
 
-async function applyPriceShock(
+/**
+ * Shifts a company's spot price by `impactPct` while keeping the AMM
+ * invariant pool_cash * pool_shares constant. Shared by admin/random market
+ * events and by the ambient background drift in src/lib/services/drift.ts.
+ */
+export async function applyPriceShock(
   client: PoolClient,
   companyId: string,
   impactPct: number

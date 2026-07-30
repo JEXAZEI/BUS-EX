@@ -29,6 +29,7 @@ does the reverse. This means:
 - Prices move automatically from trading activity, with no admin needed to set them.
 - A company's own treasury is never directly drained or inflated by trades — only the pool is.
 - Every trade is computed **inside a single Postgres transaction with row locks** (`executeTrade` in `src/lib/services/trades.ts`), server-side, from the live pool state — the client never sends a price, only a share quantity.
+- On top of trades and admin-triggered events, quiet companies also get a small random price nudge (±2%, at most once every 5 minutes) whenever someone loads the dashboard or a company page (`applyAmbientDrift` in `src/lib/services/drift.ts`) — there's no dedicated background worker, so the market "ticks" opportunistically whenever it's actually being looked at, which keeps prices moving even between trades.
 
 ---
 

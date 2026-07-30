@@ -5,6 +5,7 @@ import { companies as companiesTable, holdings, priceHistory } from "@/lib/db/sc
 import { toCompany } from "@/lib/db/mappers";
 import { getCurrentProfile } from "@/lib/session";
 import { recentCompanyTrades } from "@/lib/services/trades";
+import { applyAmbientDrift } from "@/lib/services/drift";
 import { PriceChart } from "@/components/PriceChart";
 import { TradeForm } from "@/components/TradeForm";
 import { companyPrice } from "@/lib/types";
@@ -15,6 +16,8 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
   const { id } = await params;
   const profile = await getCurrentProfile();
   if (!profile) notFound();
+
+  await applyAmbientDrift();
 
   const [companyRows, historyRows, recentTrades, holdingRows] = await Promise.all([
     db.select().from(companiesTable).where(eq(companiesTable.id, id)).limit(1),
