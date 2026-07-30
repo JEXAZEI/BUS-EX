@@ -5,8 +5,11 @@ import { gameSettings } from "@/lib/db/schema";
 
 export type MarketRegime = "bull" | "bear" | "neutral";
 
-const MIN_REGIME_MINUTES = 20;
-const MAX_REGIME_MINUTES = 75;
+// ~12 hours on average (10-14h spread) so a 5-day term sees roughly 8-10
+// regime changes -- a handful of multi-hour bull/bear stretches rather
+// than a new mood every trading period.
+const MIN_REGIME_MINUTES = 10 * 60;
+const MAX_REGIME_MINUTES = 14 * 60;
 
 // Ambient drift's random range is skewed by whichever regime is active --
 // still noisy day to day, but leaning up during a bull run and down during

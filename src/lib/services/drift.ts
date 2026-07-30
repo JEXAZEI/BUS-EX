@@ -5,14 +5,15 @@ import { applyPriceShock, randomInRange } from "@/lib/services/events";
 import { getMarketRegime, REGIME_DRIFT_RANGE, type MarketRegime } from "@/lib/services/regime";
 
 // How long a company's price can sit still before it's due for an ambient
-// nudge. Frequent enough to feel like a live market ticking between
-// trades, infrequent enough that it doesn't swamp real trading activity or
-// admin-triggered events. The nudge's base size/direction range comes from
-// the active market regime (regime.ts) -- see REGIME_DRIFT_RANGE -- then
-// gets scaled per-company by that company's own volatility multiplier, so
-// a "blue chip" barely moves while a hype stock swings much harder under
-// the same market-wide regime.
-const DRIFT_INTERVAL_MINUTES = 5;
+// nudge. Scaled to match the ~12h regimes in regime.ts: at roughly one
+// tick per hour, a full bull/bear run compounds over ~10-14 ticks instead
+// of the 100+ it would hit at a 5-minute interval, which would let a
+// single rally compound into an unrealistic multiple within a day. The
+// nudge's base size/direction range comes from the active market regime
+// (regime.ts) -- see REGIME_DRIFT_RANGE -- then gets scaled per-company by
+// that company's own volatility multiplier, so a "blue chip" barely moves
+// while a hype stock swings much harder under the same market-wide regime.
+const DRIFT_INTERVAL_MINUTES = 60;
 
 /**
  * Gives every quiet, non-delisted company a small random price nudge if its
