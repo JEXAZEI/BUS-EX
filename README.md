@@ -40,6 +40,12 @@ usernames and total net worth, never which companies someone holds or
 their trade history -- that stays private on their own profile page.
 Teacher/owner accounts are excluded since they can't trade.
 
+**Price charts** (company page and profile net-worth) have Google Finance
+-style range buttons -- **1H / 1D / 5D** -- scaled to this game's actual
+timescale (5D is effectively "the whole term") instead of years, with a
+real time-labeled x-axis instead of a bare unlabeled line
+(`src/components/PriceChart.tsx`).
+
 **A few light educational touches**, since this is for a business class:
 - Every company page has a **Fundamentals** card (market cap, shares
   outstanding, shares in circulation, beta) that teaches the vocabulary a

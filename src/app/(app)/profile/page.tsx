@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { and, desc, eq, gt } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { holdings, netWorthSnapshots, trades, companies as companiesTable } from "@/lib/db/schema";
 import { getCurrentProfile } from "@/lib/session";
@@ -19,6 +19,9 @@ export default async function ProfilePage() {
   // the chart below fills in over the course of the term.
   await snapshotNetWorth(profile.id);
 
+  // Covers the chart's full "5D" range button -- see PriceChart.tsx.
+  const chartSince = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
+
   const [holdingsRows, snapshotRows, tradeRows] = await Promise.all([
     db
       .select({ shares: holdings.shares, company: companiesTable })
@@ -28,9 +31,9 @@ export default async function ProfilePage() {
     db
       .select({ netWorth: netWorthSnapshots.netWorth, recordedAt: netWorthSnapshots.recordedAt })
       .from(netWorthSnapshots)
-      .where(eq(netWorthSnapshots.userId, profile.id))
-      .orderBy(desc(netWorthSnapshots.recordedAt))
-      .limit(200),
+      .where(and(eq(netWorthSnapshots.userId, profile.id), gte(netWorthSnapshots.recordedAt, chartSince)))
+      .orderBy(asc(netWorthSnapshots.recordedAt))
+      .limit(5000),
     db
       .select({
         id: trades.id,
@@ -62,9 +65,10 @@ export default async function ProfilePage() {
   const holdingsValue = holdingsList.reduce((sum, h) => sum + h.shares * companyPrice(h.company), 0);
   const netWorth = profile.cash_balance + holdingsValue;
 
-  const chartData = [...snapshotRows]
-    .reverse()
-    .map((s) => ({ price: parseFloat(s.netWorth), recorded_at: s.recordedAt.toISOString() }));
+  const chartData = snapshotRows.map((s) => ({
+    price: parseFloat(s.netWorth),
+    recorded_at: s.recordedAt.toISOString(),
+  }));
 
   return (
     <div className="space-y-4">

@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { and, asc, desc, eq, gte } from "drizzle-orm";
+import { and, asc, eq, gte } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { companies as companiesTable, holdings, priceHistory } from "@/lib/db/schema";
 import { toCompany } from "@/lib/db/mappers";
@@ -21,15 +21,17 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
   await applyAmbientDrift();
 
   const since = new Date(Date.now() - 25 * 60 * 60 * 1000);
+  // Covers the chart's full "5D" range button -- see PriceChart.tsx.
+  const chartSince = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
 
   const [companyRows, historyRows, baselineRows, recentTrades, holdingRows] = await Promise.all([
     db.select().from(companiesTable).where(eq(companiesTable.id, id)).limit(1),
     db
       .select({ price: priceHistory.price, recorded_at: priceHistory.recordedAt })
       .from(priceHistory)
-      .where(eq(priceHistory.companyId, id))
-      .orderBy(desc(priceHistory.recordedAt))
-      .limit(200),
+      .where(and(eq(priceHistory.companyId, id), gte(priceHistory.recordedAt, chartSince)))
+      .orderBy(asc(priceHistory.recordedAt))
+      .limit(5000),
     db
       .select({ price: priceHistory.price })
       .from(priceHistory)
@@ -48,9 +50,10 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
   if (!companyRow) notFound();
   const typedCompany = toCompany(companyRow);
   const price = companyPrice(typedCompany);
-  const chartData = [...historyRows]
-    .reverse()
-    .map((h) => ({ price: parseFloat(h.price), recorded_at: h.recorded_at.toISOString() }));
+  const chartData = historyRows.map((h) => ({
+    price: parseFloat(h.price),
+    recorded_at: h.recorded_at.toISOString(),
+  }));
   const holdingShares = holdingRows[0] ? parseFloat(holdingRows[0].shares) : 0;
 
   const baseline = baselineRows[0] ? parseFloat(baselineRows[0].price) : price;
