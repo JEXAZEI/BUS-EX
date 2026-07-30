@@ -14,49 +14,53 @@
 -- Starting price = starting_pool_cash / starting_pool_shares
 -- ----------------------------------------------------------------------------
 
+-- volatility scales each company's ambient-drift range (see db/schema.sql
+-- and src/lib/services/drift.ts) -- below 1.0 is a steadier "blue chip",
+-- above 1.0 is a wilder mover. Picked to match each company's personality:
+-- hype-driven/trend-chasing brands swing harder than boring utilities.
 insert into companies (
   name, ticker, description, sector,
-  pool_cash, pool_shares, total_shares, starting_pool_cash, starting_pool_shares
+  pool_cash, pool_shares, total_shares, starting_pool_cash, starting_pool_shares, volatility
 ) values
   ('Wi-Fi Woes Inc.', 'WIFI',
    'Your internet is "99.9% reliable" -- it is always the 0.1%.',
-   'tech', 60000, 5000, 5000, 60000, 5000),
+   'tech', 60000, 5000, 5000, 60000, 5000, 0.6),
 
   ('Homework.exe', 'HWEXE',
    'AI tutoring bots that are extremely confident and occasionally correct.',
-   'tech', 100000, 4000, 4000, 100000, 4000),
+   'tech', 100000, 4000, 4000, 100000, 4000, 1.3),
 
   ('Cloud Nein GmbH', 'CLNINE',
    'We store your files in the cloud. Which cloud? Great question.',
-   'tech', 48000, 6000, 6000, 48000, 6000),
+   'tech', 48000, 6000, 6000, 48000, 6000, 0.7),
 
   ('Cryptid Energy', 'CRYPD',
    'Sasquatch-endorsed energy drinks. Wings not included, side effects may include.',
-   'food', 48000, 8000, 8000, 48000, 8000),
+   'food', 48000, 8000, 8000, 48000, 8000, 2.2),
 
   ('Gluten Free For All', 'GFFA',
    'Every product is gluten free. Some products are also bread.',
-   'food', 75000, 5000, 5000, 75000, 5000),
+   'food', 75000, 5000, 5000, 75000, 5000, 0.6),
 
   ('Mystery Meat Co.', 'MYST',
    'Cafeteria-grade protein, now available for retail purchase. Ingredients: yes.',
-   'food', 30000, 10000, 10000, 30000, 10000),
+   'food', 30000, 10000, 10000, 30000, 10000, 1.8),
 
   ('Chairman Meow Pet Supply', 'MEOW',
    'Luxury goods for cats who have unionized and are demanding severance.',
-   'retail', 80000, 4000, 4000, 80000, 4000),
+   'retail', 80000, 4000, 4000, 80000, 4000, 1.1),
 
   ('Broke Boi Sneakers', 'BROKE',
    'Limited-edition sneakers that are, ironically, priced to make you broke.',
-   'retail', 100000, 2500, 2500, 100000, 2500),
+   'retail', 100000, 2500, 2500, 100000, 2500, 2.5),
 
   ('Snooze Button Mattresses', 'SNOOZ',
    'Ship-in-a-box mattresses endorsed by every student who skipped first period.',
-   'retail', 81000, 4500, 4500, 81000, 4500),
+   'retail', 81000, 4500, 4500, 81000, 4500, 0.5),
 
   ('Sparky''s Electric Scooters', 'SPARK',
    'Scooters that go from 0 to "why is it beeping" in 3 seconds.',
-   'auto', 90000, 3000, 3000, 90000, 3000)
+   'auto', 90000, 3000, 3000, 90000, 3000, 1.6)
 on conflict (ticker) do nothing;
 
 -- Seed the initial price point for each company so the price chart has a

@@ -93,6 +93,10 @@ create table companies (
   total_shares numeric(18, 4) not null check (total_shares > 0),
   starting_pool_cash numeric(18, 4) not null,
   starting_pool_shares numeric(18, 4) not null,
+  -- Multiplies the ambient-drift range (src/lib/services/drift.ts) for this
+  -- company -- 1.00 is baseline, below 1 is a steadier "blue chip", above 1
+  -- is a wilder mover. Lets each parody company have its own personality.
+  volatility numeric(4, 2) not null default 1.00 check (volatility > 0),
   is_delisted boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),

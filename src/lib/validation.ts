@@ -52,4 +52,5 @@ export const companyUpsertSchema = z.object({
     .regex(/^[a-zA-Z0-9 _-]+$/, "Sector can only contain letters, numbers, spaces, - and _"),
   startingPoolCash: z.number().positive().max(100_000_000),
   startingPoolShares: z.number().positive().max(100_000_000),
+  volatility: z.number().positive().max(10).default(1),
 });

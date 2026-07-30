@@ -45,6 +45,7 @@ export function toCompany(row: CompanyRow): Company {
     total_shares: num(row.totalShares),
     starting_pool_cash: num(row.startingPoolCash),
     starting_pool_shares: num(row.startingPoolShares),
+    volatility: num(row.volatility),
     is_delisted: row.isDelisted,
     created_at: row.createdAt.toISOString(),
     updated_at: row.updatedAt.toISOString(),

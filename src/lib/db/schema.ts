@@ -74,6 +74,9 @@ export const companies = pgTable(
     totalShares: numeric("total_shares", { precision: 18, scale: 4 }).notNull(),
     startingPoolCash: numeric("starting_pool_cash", { precision: 18, scale: 4 }).notNull(),
     startingPoolShares: numeric("starting_pool_shares", { precision: 18, scale: 4 }).notNull(),
+    // Multiplies the ambient-drift range (drift.ts) for this company --
+    // 1.0 is baseline, <1 is a steadier "blue chip", >1 is a wilder mover.
+    volatility: numeric("volatility", { precision: 4, scale: 2 }).notNull().default("1.00"),
     isDelisted: boolean("is_delisted").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -81,6 +84,7 @@ export const companies = pgTable(
   (t) => ({
     sectorIdx: index("companies_sector_idx").on(t.sector),
     poolCheck: check("pool_shares_le_total", sql`${t.poolShares} <= ${t.totalShares}`),
+    volatilityCheck: check("volatility_positive", sql`${t.volatility} > 0`),
   })
 );
 

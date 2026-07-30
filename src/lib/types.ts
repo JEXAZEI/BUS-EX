@@ -28,6 +28,7 @@ export interface Company {
   total_shares: number;
   starting_pool_cash: number;
   starting_pool_shares: number;
+  volatility: number;
   is_delisted: boolean;
   created_at: string;
   updated_at: string;

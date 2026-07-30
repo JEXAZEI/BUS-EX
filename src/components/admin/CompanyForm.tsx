@@ -16,6 +16,7 @@ export function CompanyForm({ company, onDone }: { company?: Company; onDone?: (
   const [startingPoolShares, setStartingPoolShares] = useState(
     String(company?.starting_pool_shares ?? 5000)
   );
+  const [volatility, setVolatility] = useState(String(company?.volatility ?? 1));
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -35,6 +36,7 @@ export function CompanyForm({ company, onDone }: { company?: Company; onDone?: (
           sector,
           startingPoolCash: parseFloat(startingPoolCash),
           startingPoolShares: parseFloat(startingPoolShares),
+          volatility: parseFloat(volatility),
         }),
       });
       const data = await res.json();
@@ -49,6 +51,7 @@ export function CompanyForm({ company, onDone }: { company?: Company; onDone?: (
         setSector("general");
         setStartingPoolCash("50000");
         setStartingPoolShares("5000");
+        setVolatility("1");
       }
       router.refresh();
       onDone?.();
@@ -126,6 +129,23 @@ export function CompanyForm({ company, onDone }: { company?: Company; onDone?: (
         Starting price = pool cash / pool shares = $
         {(parseFloat(startingPoolCash || "0") / parseFloat(startingPoolShares || "1")).toFixed(2)}
       </p>
+      <div>
+        <label className="label">Volatility</label>
+        <input
+          className="input"
+          type="number"
+          min="0.1"
+          max="10"
+          step="0.1"
+          value={volatility}
+          onChange={(e) => setVolatility(e.target.value)}
+          required
+        />
+        <p className="mt-1 text-xs text-gray-400">
+          1.0 = normal. Below 1 is a steadier &quot;blue chip&quot;, above 1 swings harder. Can be
+          changed anytime.
+        </p>
+      </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
       <button type="submit" className="btn-primary" disabled={loading}>
         {loading ? "Saving..." : company ? "Save changes" : "Create company"}

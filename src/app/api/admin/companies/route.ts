@@ -34,6 +34,7 @@ export async function POST(request: Request) {
       sector: c.sector,
       startingPoolCash: c.startingPoolCash,
       startingPoolShares: c.startingPoolShares,
+      volatility: c.volatility,
     });
     return NextResponse.json({ ok: true, id });
   } catch (err) {

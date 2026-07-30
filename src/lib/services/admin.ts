@@ -13,11 +13,15 @@ export interface CompanyUpsertInput {
   sector: string;
   startingPoolCash: number;
   startingPoolShares: number;
+  volatility: number;
 }
 
 export async function adminUpsertCompany(input: CompanyUpsertInput): Promise<string> {
   if (input.startingPoolCash <= 0 || input.startingPoolShares <= 0) {
     throw new AdminError("Starting pool cash and shares must be positive");
+  }
+  if (input.volatility <= 0) {
+    throw new AdminError("Volatility must be positive");
   }
 
   if (!input.id) {
@@ -33,6 +37,7 @@ export async function adminUpsertCompany(input: CompanyUpsertInput): Promise<str
         totalShares: String(input.startingPoolShares),
         startingPoolCash: String(input.startingPoolCash),
         startingPoolShares: String(input.startingPoolShares),
+        volatility: String(input.volatility),
       })
       .returning({ id: companies.id });
 
@@ -53,6 +58,7 @@ export async function adminUpsertCompany(input: CompanyUpsertInput): Promise<str
       ticker: input.ticker,
       description: input.description,
       sector: input.sector,
+      volatility: String(input.volatility),
       updatedAt: new Date(),
     })
     .where(eq(companies.id, input.id))
