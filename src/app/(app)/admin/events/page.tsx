@@ -19,7 +19,7 @@ export default async function AdminEventsPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-bold">Market events</h1>
+      <h1 className="text-xl font-bold tracking-tight">Market events</h1>
 
       <div className="card">
         <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-500">

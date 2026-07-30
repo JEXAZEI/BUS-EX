@@ -14,8 +14,8 @@ export default async function AdminHomePage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-bold">Admin</h1>
-        <p className="text-sm text-gray-500">Signed in as {profile.role}.</p>
+        <h1 className="text-xl font-bold tracking-tight">Admin</h1>
+        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Signed in as {profile.role}</p>
       </div>
 
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">

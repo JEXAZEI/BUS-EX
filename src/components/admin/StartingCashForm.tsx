@@ -59,7 +59,7 @@ export function StartingCashForm({ current }: { current: number }) {
       <button type="submit" className="btn-primary" disabled={loading}>
         {loading ? "Saving..." : "Save"}
       </button>
-      {saved && <span className="text-sm text-up">Saved</span>}
+      {saved && <span className="text-sm delta-up">Saved</span>}
       {error && <span className="text-sm text-red-600">{error}</span>}
     </form>
   );

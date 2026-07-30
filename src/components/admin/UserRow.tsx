@@ -136,7 +136,7 @@ export function UserRow({ user }: { user: Profile }) {
       )}
 
       {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
-      {message && <p className="mt-2 text-sm text-up">{message}</p>}
+      {message && <p className="mt-2 text-sm delta-up">{message}</p>}
     </div>
   );
 }

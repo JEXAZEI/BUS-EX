@@ -68,22 +68,22 @@ export default async function ProfilePage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-bold">@{profile.username}</h1>
-        <p className="text-sm text-gray-400 capitalize">{profile.role} account</p>
+        <h1 className="text-xl font-bold tracking-tight">@{profile.username}</h1>
+        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">{profile.role} account</p>
       </div>
 
       <div className="grid grid-cols-3 gap-2">
         <div className="card text-center">
-          <p className="text-xs text-gray-400">Cash</p>
-          <p className="font-mono font-bold">${profile.cash_balance.toFixed(2)}</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Cash</p>
+          <p className="mono-nums text-lg font-bold tabular-nums">${profile.cash_balance.toFixed(2)}</p>
         </div>
         <div className="card text-center">
-          <p className="text-xs text-gray-400">Holdings value</p>
-          <p className="font-mono font-bold">${holdingsValue.toFixed(2)}</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Holdings</p>
+          <p className="mono-nums text-lg font-bold tabular-nums">${holdingsValue.toFixed(2)}</p>
         </div>
         <div className="card text-center">
-          <p className="text-xs text-gray-400">Net worth</p>
-          <p className="font-mono font-bold">${netWorth.toFixed(2)}</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Net worth</p>
+          <p className="mono-nums text-lg font-bold tabular-nums">${netWorth.toFixed(2)}</p>
         </div>
       </div>
 
@@ -109,8 +109,8 @@ export default async function ProfilePage() {
                   <span className="font-mono text-xs text-gray-400">{h.company.ticker}</span>
                 </Link>
                 <div className="text-right">
-                  <p className="font-mono">{h.shares.toFixed(4)} sh</p>
-                  <p className="font-mono text-xs text-gray-400">
+                  <p className="mono-nums font-mono">{h.shares.toFixed(4)} sh</p>
+                  <p className="mono-nums font-mono text-xs text-gray-400">
                     ${(h.shares * companyPrice(h.company)).toFixed(2)}
                   </p>
                 </div>
@@ -131,12 +131,14 @@ export default async function ProfilePage() {
             {tradeRows.map((t) => (
               <li key={t.id} className="flex items-center justify-between py-1.5">
                 <span>
-                  <span className={t.side === "buy" ? "text-up" : "text-down"}>
+                  <span className={t.side === "buy" ? "delta-up" : "delta-down"}>
                     {t.side === "buy" ? "Bought" : "Sold"}
                   </span>{" "}
                   {parseFloat(t.shares).toFixed(2)} {t.companyTicker}
                 </span>
-                <span className="font-mono text-gray-500">${parseFloat(t.cashAmount).toFixed(2)}</span>
+                <span className="mono-nums font-mono text-gray-500 dark:text-gray-400">
+                  ${parseFloat(t.cashAmount).toFixed(2)}
+                </span>
                 <span className="text-xs text-gray-400">{t.createdAt.toLocaleDateString()}</span>
               </li>
             ))}

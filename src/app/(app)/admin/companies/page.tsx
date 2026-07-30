@@ -15,7 +15,7 @@ export default async function AdminCompaniesPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-bold">Companies</h1>
+      <h1 className="text-xl font-bold tracking-tight">Companies</h1>
 
       <CollapsibleCard title="Add a new company">
         <CompanyForm />

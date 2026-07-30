@@ -24,10 +24,13 @@ export function Navbar({ username, role }: { username: string; role: UserRole })
   }
 
   return (
-    <nav className="sticky top-0 z-20 border-b border-gray-200 bg-white/90 backdrop-blur dark:border-gray-800 dark:bg-gray-900/90">
+    <nav className="sticky top-0 z-20 border-b border-gray-200 bg-white/90 backdrop-blur dark:border-gray-800 dark:bg-ink-900/95">
+      <div className="h-0.5 bg-gradient-to-r from-brand-600 via-brand-400 to-brand-600" />
       <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
-        <Link href="/dashboard" className="text-lg font-extrabold text-brand-700 dark:text-brand-500">
-          BUS-EX
+        <Link href="/dashboard" className="flex items-center gap-1.5 font-mono text-lg font-black tracking-tight">
+          <span className="text-gray-900 dark:text-white">BUS</span>
+          <span className="text-brand-500">·</span>
+          <span className="text-brand-600 dark:text-brand-400">EX</span>
         </Link>
 
         <div className="hidden items-center gap-1 sm:flex">
@@ -35,7 +38,7 @@ export function Navbar({ username, role }: { username: string; role: UserRole })
             <Link
               key={l.href}
               href={l.href}
-              className={`rounded-lg px-3 py-2 text-sm font-medium ${
+              className={`rounded-md px-3 py-2 text-sm font-semibold tracking-tight ${
                 pathname === l.href || pathname.startsWith(l.href + "/")
                   ? "bg-brand-50 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300"
                   : "text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
@@ -44,7 +47,7 @@ export function Navbar({ username, role }: { username: string; role: UserRole })
               {l.label}
             </Link>
           ))}
-          <span className="ml-2 text-sm text-gray-400">@{username}</span>
+          <span className="ml-2 font-mono text-sm text-gray-400">@{username}</span>
           <ThemeToggle className="ml-2" />
           <button onClick={logout} className="btn-secondary ml-2">
             Log out
@@ -71,7 +74,7 @@ export function Navbar({ username, role }: { username: string; role: UserRole })
               key={l.href}
               href={l.href}
               onClick={() => setOpen(false)}
-              className={`rounded-lg px-3 py-2 text-sm font-medium ${
+              className={`rounded-md px-3 py-2 text-sm font-semibold tracking-tight ${
                 pathname === l.href
                   ? "bg-brand-50 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300"
                   : "text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
@@ -80,7 +83,7 @@ export function Navbar({ username, role }: { username: string; role: UserRole })
               {l.label}
             </Link>
           ))}
-          <span className="px-3 py-1 text-sm text-gray-400">@{username}</span>
+          <span className="px-3 py-1 font-mono text-sm text-gray-400">@{username}</span>
           <button onClick={logout} className="btn-secondary mx-3 mt-1">
             Log out
           </button>

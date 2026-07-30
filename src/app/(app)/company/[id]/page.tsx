@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { and, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, gte } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { companies as companiesTable, holdings, priceHistory } from "@/lib/db/schema";
 import { toCompany } from "@/lib/db/mappers";
@@ -19,7 +19,9 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
 
   await applyAmbientDrift();
 
-  const [companyRows, historyRows, recentTrades, holdingRows] = await Promise.all([
+  const since = new Date(Date.now() - 25 * 60 * 60 * 1000);
+
+  const [companyRows, historyRows, baselineRows, recentTrades, holdingRows] = await Promise.all([
     db.select().from(companiesTable).where(eq(companiesTable.id, id)).limit(1),
     db
       .select({ price: priceHistory.price, recorded_at: priceHistory.recordedAt })
@@ -27,6 +29,12 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
       .where(eq(priceHistory.companyId, id))
       .orderBy(desc(priceHistory.recordedAt))
       .limit(200),
+    db
+      .select({ price: priceHistory.price })
+      .from(priceHistory)
+      .where(and(eq(priceHistory.companyId, id), gte(priceHistory.recordedAt, since)))
+      .orderBy(asc(priceHistory.recordedAt))
+      .limit(1),
     recentCompanyTrades(id, 20),
     db
       .select({ shares: holdings.shares })
@@ -44,21 +52,34 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
     .map((h) => ({ price: parseFloat(h.price), recorded_at: h.recorded_at.toISOString() }));
   const holdingShares = holdingRows[0] ? parseFloat(holdingRows[0].shares) : 0;
 
+  const baseline = baselineRows[0] ? parseFloat(baselineRows[0].price) : price;
+  const dollarChange = price - baseline;
+  const pctChange = baseline > 0 ? (dollarChange / baseline) * 100 : 0;
+  const isUp = dollarChange >= 0;
+
   return (
     <div className="space-y-4">
-      <div>
+      <div className="card">
         <div className="flex items-center gap-2">
-          <h1 className="text-xl font-bold">{typedCompany.name}</h1>
-          <span className="font-mono text-sm text-gray-400">{typedCompany.ticker}</span>
-          {typedCompany.is_delisted && (
-            <span className="badge-danger">
-              DELISTED
-            </span>
-          )}
+          <h1 className="text-xl font-bold tracking-tight">{typedCompany.name}</h1>
+          <span className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-xs font-semibold tracking-wide text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+            {typedCompany.ticker}
+          </span>
+          <span className="badge-muted capitalize">{typedCompany.sector}</span>
+          {typedCompany.is_delisted && <span className="badge-danger">DELISTED</span>}
         </div>
-        <p className="text-sm text-gray-500">{typedCompany.description}</p>
-        <p className="mt-1 text-2xl font-mono font-bold">${price.toFixed(2)}</p>
-        <p className="text-xs text-gray-400 capitalize">Sector: {typedCompany.sector}</p>
+        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{typedCompany.description}</p>
+
+        <div className="mt-3 flex items-baseline gap-3">
+          <p className="mono-nums text-4xl font-bold tabular-nums">${price.toFixed(2)}</p>
+          <p className={`mono-nums flex items-center gap-1 text-sm font-semibold ${isUp ? "delta-up" : "delta-down"}`}>
+            <span aria-hidden>{isUp ? "▲" : "▼"}</span>
+            {isUp ? "+" : ""}
+            {dollarChange.toFixed(2)} ({isUp ? "+" : ""}
+            {pctChange.toFixed(2)}%)
+          </p>
+        </div>
+        <p className="text-xs text-gray-400">Past 24h</p>
       </div>
 
       <div className="card">
@@ -81,7 +102,7 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
       )}
 
       <div className="card">
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-500">
+        <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
           Recent market activity
         </h2>
         {recentTrades.length === 0 ? (
@@ -90,10 +111,12 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
           <ul className="divide-y divide-gray-100 dark:divide-gray-700 text-sm">
             {recentTrades.map((t, i) => (
               <li key={i} className="flex items-center justify-between py-1.5">
-                <span className={t.side === "buy" ? "text-up" : "text-down"}>
+                <span className={`font-medium ${t.side === "buy" ? "delta-up" : "delta-down"}`}>
                   {t.side === "buy" ? "Buy" : "Sell"} {t.shares.toFixed(2)} sh
                 </span>
-                <span className="font-mono text-gray-500">${t.price_per_share.toFixed(4)}</span>
+                <span className="mono-nums font-mono text-gray-500 dark:text-gray-400">
+                  ${t.price_per_share.toFixed(4)}
+                </span>
                 <span className="text-xs text-gray-400">
                   {new Date(t.created_at).toLocaleTimeString()}
                 </span>

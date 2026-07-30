@@ -65,7 +65,7 @@ export function ChangePasswordForm() {
         <p className="mt-1 text-xs text-gray-400">At least 8 characters.</p>
       </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
-      {message && <p className="text-sm text-up">{message}</p>}
+      {message && <p className="text-sm delta-up">{message}</p>}
       <button type="submit" className="btn-primary" disabled={loading}>
         {loading ? "Updating..." : "Change password"}
       </button>

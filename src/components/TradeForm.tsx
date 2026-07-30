@@ -128,7 +128,7 @@ export function TradeForm({
         </div>
 
         {error && <p className="text-sm text-red-600">{error}</p>}
-        {message && <p className="text-sm text-up">{message}</p>}
+        {message && <p className="text-sm delta-up">{message}</p>}
 
         <button type="submit" className="btn-primary w-full" disabled={loading}>
           {loading ? "Submitting..." : side === "buy" ? "Buy shares" : "Sell shares"}
