@@ -8,6 +8,7 @@ import { recentCompanyTrades } from "@/lib/services/trades";
 import { applyAmbientDrift } from "@/lib/services/drift";
 import { PriceChart } from "@/components/PriceChart";
 import { TradeForm } from "@/components/TradeForm";
+import { FundamentalsCard } from "@/components/FundamentalsCard";
 import { companyPrice } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -85,6 +86,13 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
       <div className="card">
         <PriceChart data={chartData} />
       </div>
+
+      <FundamentalsCard
+        price={price}
+        totalShares={typedCompany.total_shares}
+        poolShares={typedCompany.pool_shares}
+        volatility={typedCompany.volatility}
+      />
 
       {profile.role === "student" ? (
         <TradeForm

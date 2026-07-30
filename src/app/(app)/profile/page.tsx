@@ -6,6 +6,7 @@ import { getCurrentProfile } from "@/lib/session";
 import { snapshotNetWorth } from "@/lib/services/profile";
 import { PriceChart } from "@/components/PriceChart";
 import { ChangePasswordForm } from "@/components/ChangePasswordForm";
+import { DiversificationMeter } from "@/components/DiversificationMeter";
 import { companyPrice, type Company } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -93,6 +94,14 @@ export default async function ProfilePage() {
         </h2>
         <PriceChart data={chartData} />
       </div>
+
+      <DiversificationMeter
+        holdings={holdingsList.map((h) => ({
+          ticker: h.company.ticker,
+          value: h.shares * companyPrice(h.company),
+        }))}
+        cash={profile.cash_balance}
+      />
 
       <div className="card">
         <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-500">

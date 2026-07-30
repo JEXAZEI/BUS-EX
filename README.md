@@ -40,6 +40,21 @@ usernames and total net worth, never which companies someone holds or
 their trade history -- that stays private on their own profile page.
 Teacher/owner accounts are excluded since they can't trade.
 
+**A few light educational touches**, since this is for a business class:
+- Every company page has a **Fundamentals** card (market cap, shares
+  outstanding, shares in circulation, beta) that teaches the vocabulary a
+  real brokerage app uses, computed from data that's already on the page.
+- The profile page has a **Diversification meter** -- a stacked bar of
+  where a student's money is (per-company + cash) plus a plain-language
+  assessment ("Highly concentrated" / "Well diversified") based on their
+  largest position, with a one-line explanation of why diversification
+  matters.
+- Clicking **Reset game for new term** first shows a **term recap** (top 3
+  net worth, most active trader, biggest single trade, best-performing
+  stock) computed from the trading history that's about to be wiped
+  (`getTermRecap` in `src/lib/services/recap.ts`) -- a fun highlight reel
+  before it's gone.
+
 ---
 
 ## 1. Setup
