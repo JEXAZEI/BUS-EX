@@ -35,8 +35,10 @@ export async function applyAmbientDrift(): Promise<MarketRegime> {
     select c.id, c.volatility
     from companies c
     where not c.is_delisted
-      and (
-        select max(ph.recorded_at) from price_history ph where ph.company_id = c.id
+      and coalesce(
+        (select max(ph.recorded_at) from price_history ph where ph.company_id = c.id),
+        c.created_at,
+        '-infinity'
       ) < now() - (${DRIFT_INTERVAL_MINUTES} * interval '1 minute')
   `);
 
