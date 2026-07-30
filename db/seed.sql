@@ -1,6 +1,6 @@
 -- ============================================================================
 -- BUS-EX: seed data
---   - 10 placeholder parody companies with seeded AMM liquidity pools
+--   - 20 placeholder parody companies with seeded AMM liquidity pools
 --   - A starter pool of random market event templates
 --
 -- Run this once, after db/schema.sql, on a fresh database. Teacher/owner
@@ -10,7 +10,7 @@
 -- ============================================================================
 
 -- ----------------------------------------------------------------------------
--- Companies (10 parody / joke brands across 4 sectors)
+-- Companies (20 parody / joke brands across 7 sectors)
 -- Starting price = starting_pool_cash / starting_pool_shares
 -- ----------------------------------------------------------------------------
 
@@ -60,7 +60,47 @@ insert into companies (
 
   ('Sparky''s Electric Scooters', 'SPARK',
    'Scooters that go from 0 to "why is it beeping" in 3 seconds.',
-   'auto', 90000, 3000, 3000, 90000, 3000, 1.6)
+   'auto', 90000, 3000, 3000, 90000, 3000, 1.6),
+
+  ('Buffer Bros. Streaming', 'BUFFR',
+   'Unlimited movies and shows, none of which will finish loading.',
+   'entertainment', 99000, 4500, 4500, 99000, 4500, 1.4),
+
+  ('Deadline Espresso Co.', 'DEDLN',
+   'Coffee strong enough to finish the essay that was due four hours ago.',
+   'food', 63000, 7000, 7000, 63000, 7000, 1.0),
+
+  ('Group Project Insurance', 'GRPIN',
+   'Covers you when your group members "will do it tonight, I promise."',
+   'finance', 70000, 5000, 5000, 70000, 5000, 0.5),
+
+  ('Rickroll Records', 'RICK',
+   'Never gonna give you up. Never gonna let your portfolio down. Probably.',
+   'entertainment', 45000, 9000, 9000, 45000, 9000, 2.3),
+
+  ('Formal Wear 4 Prom', 'PROM',
+   'Rent a tux for one night, spend the rest of the year paying it off.',
+   'fashion', 94500, 3500, 3500, 94500, 3500, 1.5),
+
+  ('Lint Roller Industries', 'LINT',
+   'Removing pet hair from your one good sweater since forever.',
+   'retail', 66000, 6000, 6000, 66000, 6000, 0.4),
+
+  ('Yeet Athletics', 'YEET',
+   'Performance sportswear for a sport that has not been invented yet.',
+   'fashion', 99000, 3000, 3000, 99000, 3000, 2.4),
+
+  ('Group Chat Wireless', 'GCWI',
+   'Unlimited data, unlimited notifications, zero unlimited peace of mind.',
+   'tech', 85000, 5000, 5000, 85000, 5000, 1.0),
+
+  ('Parking Karma App', 'PARKK',
+   'Tells you exactly where a spot opened up four minutes after you left.',
+   'tech', 56000, 8000, 8000, 56000, 8000, 1.2),
+
+  ('Existential Dread Insurance', 'DREAD',
+   'A modest monthly premium against the 3am realization that finals are next week.',
+   'finance', 85500, 4500, 4500, 85500, 4500, 0.5)
 on conflict (ticker) do nothing;
 
 -- Seed the initial price point for each company so the price chart has a

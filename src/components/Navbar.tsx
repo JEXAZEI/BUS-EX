@@ -13,6 +13,7 @@ export function Navbar({ username, role }: { username: string; role: UserRole })
 
   const links = [
     { href: "/dashboard", label: "Market" },
+    { href: "/leaderboard", label: "Leaderboard" },
     { href: "/profile", label: "Profile" },
     ...(role === "teacher" || role === "owner" ? [{ href: "/admin", label: "Admin" }] : []),
   ];
