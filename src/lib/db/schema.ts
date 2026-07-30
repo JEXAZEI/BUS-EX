@@ -16,6 +16,7 @@ import { sql } from "drizzle-orm";
 
 export const userRole = pgEnum("user_role", ["student", "teacher", "owner"]);
 export const tradeSide = pgEnum("trade_side", ["buy", "sell"]);
+export const marketRegimeEnum = pgEnum("market_regime", ["bull", "bear", "neutral"]);
 export const eventTypeEnum = pgEnum("event_type", [
   "price_shock",
   "sector_move",
@@ -30,6 +31,8 @@ export const gameSettings = pgTable("game_settings", {
   defaultStartingCash: numeric("default_starting_cash", { precision: 14, scale: 2 })
     .notNull()
     .default("1000"),
+  marketRegime: marketRegimeEnum("market_regime").notNull().default("neutral"),
+  regimeEndsAt: timestamp("regime_ends_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

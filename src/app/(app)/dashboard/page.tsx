@@ -7,13 +7,22 @@ import { NewsTicker } from "@/components/NewsTicker";
 import { TickerTape } from "@/components/TickerTape";
 import { applyAmbientDrift } from "@/lib/services/drift";
 import { getCompanyQuotes } from "@/lib/services/quotes";
+import type { MarketRegime } from "@/lib/services/regime";
 
 export const dynamic = "force-dynamic";
 
+const REGIME_DISPLAY: Record<MarketRegime, { label: string; icon: string; className: string }> = {
+  bull: { label: "Bullish", icon: "▲", className: "delta-up" },
+  bear: { label: "Bearish", icon: "▼", className: "delta-down" },
+  neutral: { label: "Flat", icon: "▬", className: "text-gray-500 dark:text-gray-400" },
+};
+
 export default async function DashboardPage() {
   // Give quiet companies a small random nudge before rendering, so the
-  // market feels alive even between trades/events -- see drift.ts.
-  await applyAmbientDrift();
+  // market feels alive even between trades/events -- see drift.ts. The
+  // returned regime also drives the "Bullish/Bearish/Flat" badge below.
+  const regime = await applyAmbientDrift();
+  const regimeDisplay = REGIME_DISPLAY[regime];
 
   const [quotes, eventRows] = await Promise.all([
     getCompanyQuotes(),
@@ -32,10 +41,16 @@ export default async function DashboardPage() {
 
       <div className="mb-3 flex items-center justify-between">
         <h1 className="text-xl font-bold tracking-tight">Market</h1>
-        <span className="flex items-center gap-1.5 text-xs font-medium text-gray-400">
-          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-up" />
-          Live
-        </span>
+        <div className="flex items-center gap-3">
+          <span className={`mono-nums flex items-center gap-1 text-xs font-semibold ${regimeDisplay.className}`}>
+            <span aria-hidden>{regimeDisplay.icon}</span>
+            {regimeDisplay.label}
+          </span>
+          <span className="flex items-center gap-1.5 text-xs font-medium text-gray-400">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-up" />
+            Live
+          </span>
+        </div>
       </div>
 
       <div className="card overflow-hidden !p-0">
