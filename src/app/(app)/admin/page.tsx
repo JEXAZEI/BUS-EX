@@ -1,18 +1,38 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/session";
 import { getDefaultStartingCash } from "@/lib/services/admin";
+import { getRegimeStatus, type MarketRegime } from "@/lib/services/regime";
 import { TriggerEventButton } from "@/components/admin/TriggerEventButton";
 import { ResetGameButton } from "@/components/admin/ResetGameButton";
 import { StartingCashForm } from "@/components/admin/StartingCashForm";
+import { AutoRefresh } from "@/components/AutoRefresh";
 
 export const dynamic = "force-dynamic";
 
+const REGIME_LABEL: Record<MarketRegime, string> = { bull: "Bull", bear: "Bear", neutral: "Neutral" };
+const REGIME_BADGE: Record<MarketRegime, string> = {
+  bull: "badge-success",
+  bear: "badge-danger",
+  neutral: "badge-muted",
+};
+
+function formatDuration(ms: number): string {
+  const totalMinutes = Math.max(0, Math.round(ms / 60_000));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours === 0) return `${minutes}m`;
+  if (minutes === 0) return `${hours}h`;
+  return `${hours}h ${minutes}m`;
+}
+
 export default async function AdminHomePage() {
   const profile = await requireAdmin();
-  const startingCash = await getDefaultStartingCash();
+  const [startingCash, regimeStatus] = await Promise.all([getDefaultStartingCash(), getRegimeStatus()]);
+  const now = Date.now();
 
   return (
     <div className="space-y-4">
+      <AutoRefresh />
       <div>
         <h1 className="text-xl font-bold tracking-tight">Admin</h1>
         <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Signed in as {profile.role}</p>
@@ -33,6 +53,36 @@ export default async function AdminHomePage() {
             <p className="text-sm text-gray-500">Reset passwords, deactivate/delete accounts.</p>
           </Link>
         )}
+      </div>
+
+      <div className="card">
+        <div className="mb-2 flex items-center gap-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
+            Market cycle
+          </h2>
+          <span className={REGIME_BADGE[regimeStatus.regime]}>{REGIME_LABEL[regimeStatus.regime]}</span>
+        </div>
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:grid-cols-4">
+          <div>
+            <dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">Started</dt>
+            <dd className="mono-nums">{regimeStatus.startedAt.toLocaleString()}</dd>
+          </div>
+          <div>
+            <dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">Running for</dt>
+            <dd className="mono-nums">{formatDuration(now - regimeStatus.startedAt.getTime())}</dd>
+          </div>
+          <div>
+            <dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">Ends</dt>
+            <dd className="mono-nums">{regimeStatus.endsAt.toLocaleString()}</dd>
+          </div>
+          <div>
+            <dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">Ends in</dt>
+            <dd className="mono-nums">{formatDuration(regimeStatus.endsAt.getTime() - now)}</dd>
+          </div>
+        </dl>
+        <p className="mt-3 text-xs text-gray-400">
+          Never shown to students -- real markets don&apos;t announce their own trend.
+        </p>
       </div>
 
       <div className="card">

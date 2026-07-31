@@ -5,35 +5,49 @@ import { gameSettings } from "@/lib/db/schema";
 
 export type MarketRegime = "bull" | "bear" | "neutral";
 
-// ~12 hours on average (10-14h spread) so a 5-day term sees roughly 8-10
-// regime changes -- a handful of multi-hour bull/bear stretches rather
-// than a new mood every trading period.
-const MIN_REGIME_MINUTES = 10 * 60;
-const MAX_REGIME_MINUTES = 14 * 60;
+export interface RegimeStatus {
+  regime: MarketRegime;
+  startedAt: Date;
+  endsAt: Date;
+}
 
-// Ambient drift's random range is skewed by whichever regime is active --
-// still noisy day to day, but leaning up during a bull run and down during
-// a bear run, instead of pure mean-zero noise that never actually trends.
-export const REGIME_DRIFT_RANGE: Record<MarketRegime, [number, number]> = {
-  bull: [-0.005, 0.03],
-  bear: [-0.03, 0.005],
-  neutral: [-0.02, 0.02],
+// Real bull markets grind upward for a long stretch; real bear markets are
+// sharper and shorter -- a crash, then it's over. Giving each regime its
+// own duration range (rather than one shared range for all three) lets bull
+// runs simply last longer than bear runs, on top of bull also being picked
+// more often (REGIME_WEIGHTS below) -- both push the term toward spending
+// more real time trending up than down.
+const REGIME_DURATION_MINUTES: Record<MarketRegime, [number, number]> = {
+  bull: [14 * 60, 20 * 60], // 14-20h -- a long, grinding run
+  neutral: [8 * 60, 12 * 60], // 8-12h
+  bear: [5 * 60, 9 * 60], // 5-9h -- sharp and comparatively short-lived
 };
 
-function randomRegimeDurationMs(): number {
-  const minutes = MIN_REGIME_MINUTES + Math.random() * (MAX_REGIME_MINUTES - MIN_REGIME_MINUTES);
+// Ambient drift's random range is skewed by whichever regime is active.
+// Bull is deliberately gentle/steady (small average tick, "stairs up") while
+// bear is sharper and more volatile (larger average tick, "elevator down")
+// -- matching how real corrections tend to move faster than rallies, even
+// though bull runs win out over the term by simply lasting longer and
+// happening more often.
+export const REGIME_DRIFT_RANGE: Record<MarketRegime, [number, number]> = {
+  bull: [-0.008, 0.022],
+  bear: [-0.05, 0.012],
+  neutral: [-0.018, 0.018],
+};
+
+function randomRegimeDurationMs(regime: MarketRegime): number {
+  const [min, max] = REGIME_DURATION_MINUTES[regime];
+  const minutes = min + Math.random() * (max - min);
   return minutes * 60_000;
 }
 
 // The goal is "most money after 5 days," so the market needs to actually be
 // beatable -- picking the next regime uniformly among bull/bear/neutral
-// gives the whole term zero net drift (bull's average tick and bear's
-// average tick are equal and opposite, see REGIME_DRIFT_RANGE above), which
-// makes staying invested a coin flip rather than something a reasonably
-// engaged, diversified student is likely to come out ahead on. Weighting
-// the pick toward bull (without touching how strong any single regime
-// feels) means the term spends more of its time trending up than down --
-// bear runs still happen and still sting, but the market leans bullish
+// would give the whole term close to zero net drift, which makes staying
+// invested a coin flip rather than something a reasonably engaged,
+// diversified student is likely to come out ahead on. Weighting the pick
+// toward bull means the term spends more of its time trending up than down
+// -- bear runs still happen and still sting, but the market leans bullish
 // overall.
 const REGIME_WEIGHTS: Record<MarketRegime, number> = {
   bull: 0.45,
@@ -53,26 +67,31 @@ function pickNextRegime(current: MarketRegime): MarketRegime {
 }
 
 /**
- * Returns the currently active market regime, opportunistically rotating
- * to a new one (with a fresh random duration) if the current one has
- * expired. Called from applyAmbientDrift(), same "tick whenever someone's
- * looking" model -- no dedicated timer/worker needed.
+ * Returns the currently active market regime plus when it started/ends,
+ * opportunistically rotating to a new one (with a fresh random duration) if
+ * the current one has expired. Called from applyAmbientDrift(), same "tick
+ * whenever someone's looking" model -- no dedicated timer/worker needed.
  */
-export async function getMarketRegime(): Promise<MarketRegime> {
+export async function getRegimeStatus(): Promise<RegimeStatus> {
   const [row] = await db.select().from(gameSettings).where(eq(gameSettings.id, 1)).limit(1);
-  if (!row) return "neutral";
-
   const now = new Date();
+  if (!row) return { regime: "neutral", startedAt: now, endsAt: now };
+
   if (row.regimeEndsAt.getTime() > now.getTime()) {
-    return row.marketRegime;
+    return { regime: row.marketRegime, startedAt: row.regimeStartedAt, endsAt: row.regimeEndsAt };
   }
 
   const next = pickNextRegime(row.marketRegime);
-  const endsAt = new Date(now.getTime() + randomRegimeDurationMs());
+  const endsAt = new Date(now.getTime() + randomRegimeDurationMs(next));
   await db
     .update(gameSettings)
-    .set({ marketRegime: next, regimeEndsAt: endsAt })
+    .set({ marketRegime: next, regimeStartedAt: now, regimeEndsAt: endsAt })
     .where(eq(gameSettings.id, 1));
 
-  return next;
+  return { regime: next, startedAt: now, endsAt };
+}
+
+/** Convenience wrapper for callers (ambient drift) that only need the regime itself. */
+export async function getMarketRegime(): Promise<MarketRegime> {
+  return (await getRegimeStatus()).regime;
 }

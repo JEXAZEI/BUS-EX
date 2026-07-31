@@ -32,6 +32,7 @@ export const gameSettings = pgTable("game_settings", {
     .notNull()
     .default("1000"),
   marketRegime: marketRegimeEnum("market_regime").notNull().default("neutral"),
+  regimeStartedAt: timestamp("regime_started_at", { withTimezone: true }).notNull().defaultNow(),
   regimeEndsAt: timestamp("regime_ends_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

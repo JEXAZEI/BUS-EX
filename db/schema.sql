@@ -40,6 +40,7 @@ create table game_settings (
   id smallint primary key default 1 check (id = 1),
   default_starting_cash numeric(14, 2) not null default 1000,
   market_regime market_regime not null default 'neutral',
+  regime_started_at timestamptz not null default now(),
   regime_ends_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
