@@ -25,9 +25,31 @@ function randomRegimeDurationMs(): number {
   return minutes * 60_000;
 }
 
+// The goal is "most money after 5 days," so the market needs to actually be
+// beatable -- picking the next regime uniformly among bull/bear/neutral
+// gives the whole term zero net drift (bull's average tick and bear's
+// average tick are equal and opposite, see REGIME_DRIFT_RANGE above), which
+// makes staying invested a coin flip rather than something a reasonably
+// engaged, diversified student is likely to come out ahead on. Weighting
+// the pick toward bull (without touching how strong any single regime
+// feels) means the term spends more of its time trending up than down --
+// bear runs still happen and still sting, but the market leans bullish
+// overall.
+const REGIME_WEIGHTS: Record<MarketRegime, number> = {
+  bull: 0.45,
+  neutral: 0.35,
+  bear: 0.2,
+};
+
 function pickNextRegime(current: MarketRegime): MarketRegime {
   const options = (["bull", "bear", "neutral"] as const).filter((r) => r !== current);
-  return options[Math.floor(Math.random() * options.length)]!;
+  const totalWeight = options.reduce((sum, r) => sum + REGIME_WEIGHTS[r], 0);
+  let roll = Math.random() * totalWeight;
+  for (const r of options) {
+    roll -= REGIME_WEIGHTS[r];
+    if (roll <= 0) return r;
+  }
+  return options[options.length - 1]!;
 }
 
 /**
