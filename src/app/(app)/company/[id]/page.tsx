@@ -9,6 +9,7 @@ import { applyAmbientDrift } from "@/lib/services/drift";
 import { PriceChart } from "@/components/PriceChart";
 import { TradeForm } from "@/components/TradeForm";
 import { FundamentalsCard } from "@/components/FundamentalsCard";
+import { AutoRefresh } from "@/components/AutoRefresh";
 import { companyPrice } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -63,6 +64,7 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
 
   return (
     <div className="space-y-4">
+      <AutoRefresh />
       <div className="card">
         <div className="flex items-center gap-2">
           <h1 className="text-xl font-bold tracking-tight">{typedCompany.name}</h1>

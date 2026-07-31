@@ -7,6 +7,7 @@ import { snapshotNetWorth } from "@/lib/services/profile";
 import { PriceChart } from "@/components/PriceChart";
 import { ChangePasswordForm } from "@/components/ChangePasswordForm";
 import { DiversificationMeter } from "@/components/DiversificationMeter";
+import { AutoRefresh } from "@/components/AutoRefresh";
 import { companyPrice, type Company } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -72,6 +73,7 @@ export default async function ProfilePage() {
 
   return (
     <div className="space-y-4">
+      <AutoRefresh />
       <div>
         <h1 className="text-xl font-bold tracking-tight">@{profile.username}</h1>
         <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">{profile.role} account</p>

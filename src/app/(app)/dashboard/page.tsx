@@ -5,6 +5,7 @@ import { events as eventsTable } from "@/lib/db/schema";
 import { toMarketEvent } from "@/lib/db/mappers";
 import { NewsTicker } from "@/components/NewsTicker";
 import { TickerTape } from "@/components/TickerTape";
+import { AutoRefresh } from "@/components/AutoRefresh";
 import { applyAmbientDrift } from "@/lib/services/drift";
 import { getCompanyQuotes } from "@/lib/services/quotes";
 
@@ -30,6 +31,7 @@ export default async function DashboardPage() {
 
   return (
     <div>
+      <AutoRefresh />
       <TickerTape initialQuotes={tickerQuotes} />
       <NewsTicker initialEvents={events} />
 

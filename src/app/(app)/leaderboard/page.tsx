@@ -1,5 +1,6 @@
 import { getCurrentProfile } from "@/lib/session";
 import { getLeaderboard } from "@/lib/services/leaderboard";
+import { AutoRefresh } from "@/components/AutoRefresh";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,7 @@ export default async function LeaderboardPage() {
 
   return (
     <div>
+      <AutoRefresh />
       <div className="mb-3">
         <h1 className="text-xl font-bold tracking-tight">Leaderboard</h1>
         <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
