@@ -69,6 +69,26 @@ export function PriceChart({ data }: { data: Point[] }) {
   const stroke = up ? "#16a34a" : "#dc2626";
   const gradientId = `price-fill-${up ? "up" : "down"}`;
 
+  // recharts' automatic tick placement (minTickGap) assumes roughly evenly
+  // spaced data -- it doesn't hold up once ambient drift backfills a big
+  // cluster of hourly catch-up ticks (drift.ts) into a short span, which
+  // packs far more points into the visible window than it expects and
+  // makes it draw overlapping, unreadable labels. Generating a small, fixed
+  // number of evenly-spaced tick positions across the visible time range
+  // ourselves sidesteps that entirely -- always exactly TICK_COUNT labels,
+  // evenly spread, regardless of how the underlying points are clustered.
+  const TICK_COUNT = 5;
+  const axisTicks = useMemo(() => {
+    if (chartData.length < 2) return [];
+    const first = chartData[0]!.time;
+    const last = chartData[chartData.length - 1]!.time;
+    if (first === last) return [first];
+    return Array.from(
+      { length: TICK_COUNT },
+      (_, i) => first + ((last - first) * i) / (TICK_COUNT - 1)
+    );
+  }, [chartData]);
+
   return (
     <div>
       <div className="mb-2 flex justify-end gap-1">
@@ -108,11 +128,11 @@ export function PriceChart({ data }: { data: Point[] }) {
                 type="number"
                 scale="time"
                 domain={["dataMin", "dataMax"]}
+                ticks={axisTicks}
                 tickFormatter={(v) => formatTick(v, range)}
                 tick={{ fontSize: 11, fill: "#9ca3af" }}
                 axisLine={false}
                 tickLine={false}
-                minTickGap={40}
               />
               <YAxis domain={["auto", "auto"]} hide />
               <Tooltip content={<ChartTooltip />} />

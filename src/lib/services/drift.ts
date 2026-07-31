@@ -42,12 +42,12 @@ export async function applyAmbientDrift(): Promise<MarketRegime> {
   const [baseMin, baseMax] = REGIME_DRIFT_RANGE[regime];
   const intervalMs = DRIFT_INTERVAL_MINUTES * 60_000;
 
-  const stale = await db.execute<{ id: string; volatility: string; last_tick: string }>(sql`
-    select c.id, c.volatility,
-      coalesce(
-        (select max(ph.recorded_at) from price_history ph where ph.company_id = c.id),
-        c.created_at
-      ) as last_tick
+  // Cheap, unlocked pre-filter -- just narrows down which companies are
+  // worth taking a lock on. The real "how many ticks are we behind" number
+  // is recomputed per company below, inside that company's own locked
+  // transaction, since this list can be stale by the time we get there.
+  const candidates = await db.execute<{ id: string }>(sql`
+    select c.id
     from companies c
     where not c.is_delisted
       and coalesce(
@@ -59,14 +59,39 @@ export async function applyAmbientDrift(): Promise<MarketRegime> {
 
   const now = Date.now();
 
-  for (const row of stale.rows) {
-    const volatility = parseFloat(row.volatility) || 1;
-    const lastTick = new Date(row.last_tick).getTime();
-    const ticks = Math.min(Math.floor((now - lastTick) / intervalMs), MAX_CATCHUP_TICKS);
-    if (ticks < 1) continue;
-
+  for (const row of candidates.rows) {
     try {
       await withTransaction(async (client) => {
+        // Lock the company row *before* deciding how many ticks it's
+        // behind by. This page has no dedicated worker -- every page load
+        // opportunistically calls applyAmbientDrift() for every company --
+        // so two page loads landing close together can both see the same
+        // stale company. Without a lock guarding the "how far behind is
+        // it" read, both would independently compute e.g. "72 hours
+        // behind" from the same last tick and each insert their own full
+        // 72-tick backfill with an independent random walk, so the sorted
+        // price history would interleave two diverging sequences over the
+        // same window -- a chart that whips back and forth instead of
+        // trending. Locking first makes the second caller block until the
+        // first commits, then it re-reads a now-fresh last tick and
+        // correctly finds nothing left to backfill.
+        const companyRes = await client.query<{ volatility: string }>(
+          `select volatility from companies where id = $1 for update`,
+          [row.id]
+        );
+        const company = companyRes.rows[0];
+        if (!company) return;
+
+        const lastTickRes = await client.query<{ last_tick: Date }>(
+          `select coalesce(max(recorded_at), (select created_at from companies where id = $1)) as last_tick
+           from price_history where company_id = $1`,
+          [row.id]
+        );
+        const lastTick = lastTickRes.rows[0]!.last_tick.getTime();
+        const ticks = Math.min(Math.floor((now - lastTick) / intervalMs), MAX_CATCHUP_TICKS);
+        if (ticks < 1) return;
+
+        const volatility = parseFloat(company.volatility) || 1;
         for (let i = 1; i <= ticks; i++) {
           const impactPct = randomInRange(baseMin * volatility, baseMax * volatility);
           const tickTime = new Date(Math.min(lastTick + i * intervalMs, now));
