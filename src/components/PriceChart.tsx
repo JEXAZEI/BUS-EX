@@ -1,7 +1,16 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ReferenceLine,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 interface Point {
   price: number;
@@ -18,12 +27,22 @@ const RANGES: { key: RangeKey; label: string; ms: number }[] = [
   { key: "5D", label: "5D", ms: 5 * 24 * 60 * 60 * 1000 },
 ];
 
+// Robinhood/Google-Finance-style up/down colors -- more saturated and more
+// immediately recognizable as "a stock chart" than the generic Tailwind
+// green/red used before.
+const UP_COLOR = "#00c805";
+const DOWN_COLOR = "#ff3b30";
+
 function formatTick(ts: number, range: RangeKey): string {
   const d = new Date(ts);
   if (range === "5D") {
     return d.toLocaleDateString(undefined, { weekday: "short", hour: "numeric" });
   }
   return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+
+function formatPrice(v: number): string {
+  return `$${v.toFixed(v < 10 ? 2 : v < 1000 ? 2 : 0)}`;
 }
 
 function ChartTooltip({
@@ -65,8 +84,9 @@ export function PriceChart({ data }: { data: Point[] }) {
   // isn't just an empty box -- still clearly labeled by the range buttons.
   const chartData = filtered.length >= 2 ? filtered : sorted.slice(-2);
 
-  const up = chartData.length > 0 && chartData[chartData.length - 1]!.price >= chartData[0]!.price;
-  const stroke = up ? "#16a34a" : "#dc2626";
+  const baseline = chartData[0]?.price ?? 0;
+  const up = chartData.length > 0 && chartData[chartData.length - 1]!.price >= baseline;
+  const stroke = up ? UP_COLOR : DOWN_COLOR;
   const gradientId = `price-fill-${up ? "up" : "down"}`;
 
   // recharts' automatic tick placement (minTickGap) assumes roughly evenly
@@ -89,6 +109,20 @@ export function PriceChart({ data }: { data: Point[] }) {
     );
   }, [chartData]);
 
+  // A real stock chart's Y axis is padded so normal noise doesn't fill the
+  // whole vertical height -- fitting the axis tightly to just [min, max] of
+  // whatever's visible (the old "auto" domain) makes even a 1% wobble look
+  // like a dramatic swing. A fixed ~15% headroom above and below keeps the
+  // line's shape readable and proportionate no matter the range.
+  const yDomain = useMemo((): [number, number] => {
+    if (chartData.length === 0) return [0, 1];
+    const prices = chartData.map((d) => d.price);
+    const min = Math.min(...prices, baseline);
+    const max = Math.max(...prices, baseline);
+    const pad = (max - min) * 0.15 || max * 0.05 || 1;
+    return [Math.max(0, min - pad), max + pad];
+  }, [chartData, baseline]);
+
   return (
     <div>
       <div className="mb-2 flex justify-end gap-1">
@@ -109,16 +143,16 @@ export function PriceChart({ data }: { data: Point[] }) {
       </div>
 
       {chartData.length < 2 ? (
-        <div className="flex h-48 items-center justify-center text-sm text-gray-400">
+        <div className="flex h-56 items-center justify-center text-sm text-gray-400">
           Not enough price history yet.
         </div>
       ) : (
-        <div className="h-48 w-full text-gray-200 dark:text-gray-700">
+        <div className="h-56 w-full text-gray-100 dark:text-gray-800">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={chartData} margin={{ top: 8, right: 4, left: 4, bottom: 0 }}>
+            <AreaChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
               <defs>
                 <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={stroke} stopOpacity={0.22} />
+                  <stop offset="0%" stopColor={stroke} stopOpacity={0.25} />
                   <stop offset="100%" stopColor={stroke} stopOpacity={0} />
                 </linearGradient>
               </defs>
@@ -134,16 +168,30 @@ export function PriceChart({ data }: { data: Point[] }) {
                 axisLine={false}
                 tickLine={false}
               />
-              <YAxis domain={["auto", "auto"]} hide />
-              <Tooltip content={<ChartTooltip />} />
+              <YAxis
+                domain={yDomain}
+                tickFormatter={formatPrice}
+                tick={{ fontSize: 11, fill: "#9ca3af" }}
+                axisLine={false}
+                tickLine={false}
+                tickCount={5}
+                width={52}
+                orientation="right"
+              />
+              <ReferenceLine y={baseline} stroke="#9ca3af" strokeDasharray="3 3" strokeOpacity={0.6} />
+              <Tooltip
+                content={<ChartTooltip />}
+                cursor={{ stroke: "#9ca3af", strokeWidth: 1, strokeDasharray: "3 3" }}
+              />
               <Area
                 type="monotone"
                 dataKey="price"
                 stroke={stroke}
-                strokeWidth={2}
+                strokeWidth={1.75}
                 fill={`url(#${gradientId})`}
                 dot={false}
                 activeDot={{ r: 3, stroke, strokeWidth: 2, fill: "white" }}
+                isAnimationActive={false}
               />
             </AreaChart>
           </ResponsiveContainer>
