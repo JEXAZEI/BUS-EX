@@ -2,17 +2,24 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { withTransaction, db } from "@/lib/db/client";
 import { applyPriceShock, randomInRange } from "@/lib/services/events";
-import { getMarketRegime, REGIME_DRIFT_RANGE, type MarketRegime } from "@/lib/services/regime";
+import {
+  getMarketRegime,
+  REGIME_BIAS,
+  IDIOSYNCRATIC_DRIFT_RANGE,
+  type MarketRegime,
+} from "@/lib/services/regime";
 
 // How long a company's price can sit still before it's due for an ambient
 // nudge. Scaled to match the ~12h regimes in regime.ts: at roughly one
 // tick per hour, a full bull/bear run compounds over ~10-14 ticks instead
 // of the 100+ it would hit at a 5-minute interval, which would let a
-// single rally compound into an unrealistic multiple within a day. The
-// nudge's base size/direction range comes from the active market regime
-// (regime.ts) -- see REGIME_DRIFT_RANGE -- then gets scaled per-company by
-// that company's own volatility multiplier, so a "blue chip" barely moves
-// while a hype stock swings much harder under the same market-wide regime.
+// single rally compound into an unrealistic multiple within a day. Each
+// tick combines the active regime's shared bias (regime.ts, REGIME_BIAS)
+// with a per-company random idiosyncratic move (IDIOSYNCRATIC_DRIFT_RANGE)
+// so companies diverge from each other and from the overall trend, then
+// the whole thing gets scaled by that company's own volatility multiplier,
+// so a "blue chip" barely moves while a hype stock swings much harder
+// under the same market-wide regime.
 const DRIFT_INTERVAL_MINUTES = 60;
 
 // There's no dedicated background worker (see below), so a company that
@@ -39,7 +46,8 @@ const MAX_CATCHUP_TICKS = 72;
  */
 export async function applyAmbientDrift(): Promise<MarketRegime> {
   const regime = await getMarketRegime();
-  const [baseMin, baseMax] = REGIME_DRIFT_RANGE[regime];
+  const bias = REGIME_BIAS[regime];
+  const [noiseMin, noiseMax] = IDIOSYNCRATIC_DRIFT_RANGE;
   const intervalMs = DRIFT_INTERVAL_MINUTES * 60_000;
 
   // Cheap, unlocked pre-filter -- just narrows down which companies are
@@ -93,7 +101,7 @@ export async function applyAmbientDrift(): Promise<MarketRegime> {
 
         const volatility = parseFloat(company.volatility) || 1;
         for (let i = 1; i <= ticks; i++) {
-          const impactPct = randomInRange(baseMin * volatility, baseMax * volatility);
+          const impactPct = volatility * (bias + randomInRange(noiseMin, noiseMax));
           const tickTime = new Date(Math.min(lastTick + i * intervalMs, now));
           await applyPriceShock(client, row.id, impactPct, tickTime);
         }

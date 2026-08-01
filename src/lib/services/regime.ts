@@ -23,17 +23,25 @@ const REGIME_DURATION_MINUTES: Record<MarketRegime, [number, number]> = {
   bear: [5 * 60, 9 * 60], // 5-9h -- sharp and comparatively short-lived
 };
 
-// Ambient drift's random range is skewed by whichever regime is active.
-// Bull is deliberately gentle/steady (small average tick, "stairs up") while
-// bear is sharper and more volatile (larger average tick, "elevator down")
-// -- matching how real corrections tend to move faster than rallies, even
-// though bull runs win out over the term by simply lasting longer and
-// happening more often.
-export const REGIME_DRIFT_RANGE: Record<MarketRegime, [number, number]> = {
-  bull: [-0.008, 0.022],
-  bear: [-0.05, 0.012],
-  neutral: [-0.018, 0.018],
+// The regime's own contribution to ambient drift is a single shared bias
+// per tick, not a wide range -- "the market" leans up during bull and down
+// during bear. Bear's magnitude is larger than bull's ("elevator down,
+// stairs up"), matching how real corrections tend to move faster than
+// rallies, even though bull runs win out over the term by simply lasting
+// longer and being picked more often.
+export const REGIME_BIAS: Record<MarketRegime, number> = {
+  bull: 0.01,
+  bear: -0.018,
+  neutral: 0,
 };
+
+// Applied per company, independent of the regime bias above and of every
+// other company -- real individual stocks don't all move in lockstep with
+// "the market," even on a day the index is clearly up or down. This is
+// deliberately comparable in size to the regime bias itself so a
+// meaningful share of companies buck the overall trend on any given tick,
+// not just a token few.
+export const IDIOSYNCRATIC_DRIFT_RANGE: [number, number] = [-0.025, 0.025];
 
 function randomRegimeDurationMs(regime: MarketRegime): number {
   const [min, max] = REGIME_DURATION_MINUTES[regime];
