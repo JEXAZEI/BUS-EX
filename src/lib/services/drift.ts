@@ -10,25 +10,30 @@ import {
 } from "@/lib/services/regime";
 
 // How long a company's price can sit still before it's due for an ambient
-// nudge. Scaled to match the ~12h regimes in regime.ts: at roughly one
-// tick per hour, a full bull/bear run compounds over ~10-14 ticks instead
-// of the 100+ it would hit at a 5-minute interval, which would let a
-// single rally compound into an unrealistic multiple within a day. Each
-// tick combines the active regime's shared bias (regime.ts, REGIME_BIAS)
-// with a per-company random idiosyncratic move (IDIOSYNCRATIC_DRIFT_RANGE)
-// so companies diverge from each other and from the overall trend, then
-// the whole thing gets scaled by that company's own volatility multiplier,
-// so a "blue chip" barely moves while a hype stock swings much harder
-// under the same market-wide regime.
-const DRIFT_INTERVAL_MINUTES = 60;
+// nudge. 15 minutes rather than a full hour so the "1H" chart range button
+// (PriceChart.tsx) actually has multiple points to draw instead of 0-1 --
+// at an hourly tick, a quiet company's 1-hour window usually held at most
+// one real point, and the chart's "not enough data" fallback would grab the
+// last 2 points from anywhere in its whole history, which is always a dead
+// straight line (any 2 points are). REGIME_BIAS and IDIOSYNCRATIC_DRIFT_RANGE
+// (regime.ts) are scaled down to match this interval, so a full bull/bear
+// run still compounds over roughly the same number of *hours* as before,
+// just spread across 4x as many, smaller ticks. Each tick combines the
+// active regime's shared bias with a per-company random idiosyncratic move
+// so companies diverge from each other and from the overall trend, then the
+// whole thing gets scaled by that company's own volatility multiplier, so a
+// "blue chip" barely moves while a hype stock swings much harder under the
+// same market-wide regime.
+const DRIFT_INTERVAL_MINUTES = 15;
 
 // There's no dedicated background worker (see below), so a company that
 // nobody's checked on in a while needs to "catch up" all at once rather
 // than getting a single tick as of right now -- otherwise a Friday-to-
 // Monday gap would show as one lonely nudge and a long flat line on the
-// chart. Capped at 3 days' worth of hourly ticks so a genuinely long idle
+// chart. Capped at 3 days' worth of 15-minute ticks (4x the old 72, since
+// each tick now covers a quarter of the real time) so a genuinely long idle
 // stretch (e.g. between class terms) doesn't do unbounded work.
-const MAX_CATCHUP_TICKS = 72;
+const MAX_CATCHUP_TICKS = 288;
 
 /**
  * Gives every quiet, non-delisted company a small random price nudge if its

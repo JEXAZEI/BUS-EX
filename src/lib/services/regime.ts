@@ -17,21 +17,25 @@ export interface RegimeStatus {
 // runs simply last longer than bear runs, on top of bull also being picked
 // more often (REGIME_WEIGHTS below) -- both push the term toward spending
 // more real time trending up than down.
-const REGIME_DURATION_MINUTES: Record<MarketRegime, [number, number]> = {
+export const REGIME_DURATION_MINUTES: Record<MarketRegime, [number, number]> = {
   bull: [14 * 60, 20 * 60], // 14-20h -- a long, grinding run
   neutral: [8 * 60, 12 * 60], // 8-12h
   bear: [5 * 60, 9 * 60], // 5-9h -- sharp and comparatively short-lived
 };
 
-// The regime's own contribution to ambient drift is a single shared bias
-// per tick, not a wide range -- "the market" leans up during bull and down
-// during bear. Bear's magnitude is larger than bull's ("elevator down,
-// stairs up"), matching how real corrections tend to move faster than
-// rallies, even though bull runs win out over the term by simply lasting
-// longer and being picked more often.
+// The regime's own contribution to a single ambient-drift tick (drift.ts
+// ticks every 15 minutes -- see DRIFT_INTERVAL_MINUTES there). "The market"
+// leans up during bull and down during bear. Bear's magnitude is larger
+// than bull's ("elevator down, stairs up"), matching how real corrections
+// tend to move faster than rallies, even though bull runs win out over the
+// term by simply lasting longer and being picked more often.
+//
+// These are per-15-minute-tick values -- a quarter of the per-hour bias
+// they'd need to be at a 60-minute tick, since bias accumulates roughly
+// additively across ticks and there are now 4x as many ticks per hour.
 export const REGIME_BIAS: Record<MarketRegime, number> = {
-  bull: 0.01,
-  bear: -0.018,
+  bull: 0.0025,
+  bear: -0.0045,
   neutral: 0,
 };
 
@@ -41,7 +45,12 @@ export const REGIME_BIAS: Record<MarketRegime, number> = {
 // deliberately comparable in size to the regime bias itself so a
 // meaningful share of companies buck the overall trend on any given tick,
 // not just a token few.
-export const IDIOSYNCRATIC_DRIFT_RANGE: [number, number] = [-0.025, 0.025];
+//
+// Scaled down from the old 60-minute-tick range by sqrt(4) rather than 4 --
+// noise (unlike bias) accumulates like a random walk, where variance adds
+// across ticks, so halving each tick's range keeps the same net hourly
+// volatility instead of quietly making the market calmer.
+export const IDIOSYNCRATIC_DRIFT_RANGE: [number, number] = [-0.0125, 0.0125];
 
 function randomRegimeDurationMs(regime: MarketRegime): number {
   const [min, max] = REGIME_DURATION_MINUTES[regime];
@@ -102,4 +111,25 @@ export async function getRegimeStatus(): Promise<RegimeStatus> {
 /** Convenience wrapper for callers (ambient drift) that only need the regime itself. */
 export async function getMarketRegime(): Promise<MarketRegime> {
   return (await getRegimeStatus()).regime;
+}
+
+/**
+ * Admin/teacher override -- forces the market straight into the given
+ * regime right now, for however long they specify (or that regime's normal
+ * average duration if they don't). Bypasses the usual random pick/duration
+ * entirely; the next *natural* rotation after this one still goes through
+ * the normal weighted pick.
+ */
+export async function setRegime(regime: MarketRegime, durationMinutes?: number): Promise<RegimeStatus> {
+  const now = new Date();
+  const [min, max] = REGIME_DURATION_MINUTES[regime];
+  const minutes = durationMinutes && durationMinutes > 0 ? durationMinutes : (min + max) / 2;
+  const endsAt = new Date(now.getTime() + minutes * 60_000);
+
+  await db
+    .update(gameSettings)
+    .set({ marketRegime: regime, regimeStartedAt: now, regimeEndsAt: endsAt })
+    .where(eq(gameSettings.id, 1));
+
+  return { regime, startedAt: now, endsAt };
 }

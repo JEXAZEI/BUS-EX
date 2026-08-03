@@ -5,6 +5,7 @@ import { getRegimeStatus, type MarketRegime } from "@/lib/services/regime";
 import { TriggerEventButton } from "@/components/admin/TriggerEventButton";
 import { ResetGameButton } from "@/components/admin/ResetGameButton";
 import { StartingCashForm } from "@/components/admin/StartingCashForm";
+import { SetRegimeForm } from "@/components/admin/SetRegimeForm";
 import { AutoRefresh } from "@/components/AutoRefresh";
 
 export const dynamic = "force-dynamic";
@@ -87,6 +88,7 @@ export default async function AdminHomePage() {
         <p className="mt-3 text-xs text-gray-400">
           Never shown to students -- real markets don&apos;t announce their own trend.
         </p>
+        <SetRegimeForm current={regimeStatus.regime} />
       </div>
 
       <div className="card">
