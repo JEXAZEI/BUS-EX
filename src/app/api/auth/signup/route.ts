@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { signupSchema } from "@/lib/validation";
 import { signupUser, SignupError } from "@/lib/services/auth";
 import { createSession, setSessionCookie } from "@/lib/auth/session";
+import { isUniqueViolation } from "@/lib/db/errors";
 
 export async function POST(request: Request) {
   let body: unknown;
@@ -31,7 +32,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: err.message }, { status: 409 });
     }
     // Unique constraint race (two signups for the same username at once).
-    if (err instanceof Error && "code" in err && (err as { code?: string }).code === "23505") {
+    if (isUniqueViolation(err)) {
       return NextResponse.json({ error: "That username is already taken" }, { status: 409 });
     }
     console.error("Signup failed:", err);

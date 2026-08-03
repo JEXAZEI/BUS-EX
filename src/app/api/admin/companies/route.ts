@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentProfile } from "@/lib/session";
 import { companyUpsertSchema } from "@/lib/validation";
 import { adminUpsertCompany, AdminError } from "@/lib/services/admin";
+import { isUniqueViolation } from "@/lib/db/errors";
 
 export async function POST(request: Request) {
   const profile = await getCurrentProfile();
@@ -41,7 +42,7 @@ export async function POST(request: Request) {
     if (err instanceof AdminError) {
       return NextResponse.json({ error: err.message }, { status: 400 });
     }
-    if (err instanceof Error && "code" in err && (err as { code?: string }).code === "23505") {
+    if (isUniqueViolation(err)) {
       return NextResponse.json({ error: "That ticker is already in use" }, { status: 409 });
     }
     console.error("Company upsert failed:", err);
