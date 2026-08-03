@@ -10,7 +10,7 @@ import { CollapsibleCard } from "@/components/admin/CollapsibleCard";
 export const dynamic = "force-dynamic";
 
 export default async function AdminCompaniesPage() {
-  await requireAdmin();
+  const profile = await requireAdmin();
   const rows = await db.select().from(companiesTable).orderBy(asc(companiesTable.name));
 
   return (
@@ -23,7 +23,7 @@ export default async function AdminCompaniesPage() {
 
       <div className="space-y-2">
         {rows.map(toCompany).map((c) => (
-          <CompanyRow key={c.id} company={c} />
+          <CompanyRow key={c.id} company={c} isOwner={profile.role === "owner"} />
         ))}
       </div>
     </div>

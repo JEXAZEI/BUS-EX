@@ -47,6 +47,10 @@ export default async function AdminHomePage() {
           <p className="font-semibold">Market events</p>
           <p className="text-sm text-gray-500">Trigger events and view the event log.</p>
         </Link>
+        <Link href="/admin/students" className="card hover:border-brand-300">
+          <p className="font-semibold">Students</p>
+          <p className="text-sm text-gray-500">Look up any student&apos;s portfolio and trades.</p>
+        </Link>
         {profile.role === "owner" && (
           <Link href="/admin/users" className="card hover:border-brand-300">
             <p className="font-semibold">Users</p>
@@ -109,7 +113,16 @@ export default async function AdminHomePage() {
           Wipes all trades and history and resets student balances/company prices back to their
           configured starting values. Use this at the start of a new class term.
         </p>
-        <ResetGameButton />
+        <p className="mb-3 text-sm text-gray-500">
+          Reset can&apos;t be undone, so grab a copy of the final standings first if you need one for
+          grading.
+        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <a href="/api/admin/export" className="btn-secondary">
+            Export results (CSV)
+          </a>
+          <ResetGameButton />
+        </div>
       </div>
     </div>
   );

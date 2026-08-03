@@ -2,11 +2,19 @@ import { NextResponse } from "next/server";
 import { getCurrentProfile } from "@/lib/session";
 import { tradeSchema } from "@/lib/validation";
 import { executeTrade, TradeError } from "@/lib/services/trades";
+import { checkTradeRateLimit } from "@/lib/rateLimit";
 
 export async function POST(request: Request) {
   const profile = await getCurrentProfile();
   if (!profile || !profile.is_active) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+
+  if (!(await checkTradeRateLimit(profile.id))) {
+    return NextResponse.json(
+      { error: "Too many trades too quickly. Wait a few seconds and try again." },
+      { status: 429 }
+    );
   }
 
   let body: unknown;

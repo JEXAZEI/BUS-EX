@@ -1,7 +1,7 @@
 import "server-only";
 import { eq, sql } from "drizzle-orm";
 import { db, withTransaction } from "@/lib/db/client";
-import { companies, gameSettings, priceHistory } from "@/lib/db/schema";
+import { companies, gameSettings, priceHistory, trades } from "@/lib/db/schema";
 
 export class AdminError extends Error {}
 
@@ -73,6 +73,26 @@ export async function adminSetCompanyDelisted(companyId: string, delisted: boole
     .update(companies)
     .set({ isDelisted: delisted, updatedAt: new Date() })
     .where(eq(companies.id, companyId));
+}
+
+/**
+ * Permanently removes a company -- only allowed if it has no trade history,
+ * so a teacher can clean up a fat-fingered/duplicate company they just
+ * created, but can't accidentally erase real students' trade records (which
+ * would cascade-delete along with it). A company that's actually been
+ * traded should be delisted instead, which is reversible and preserves
+ * history.
+ */
+export async function adminDeleteCompany(companyId: string): Promise<void> {
+  const [tradeRow] = await db.select({ id: trades.id }).from(trades).where(eq(trades.companyId, companyId)).limit(1);
+  if (tradeRow) {
+    throw new AdminError(
+      "This company has trade history and can't be deleted -- delist it instead to preserve records."
+    );
+  }
+
+  const deleted = await db.delete(companies).where(eq(companies.id, companyId)).returning({ id: companies.id });
+  if (deleted.length === 0) throw new AdminError("Company not found");
 }
 
 export async function adminSetStartingCash(amount: number): Promise<void> {

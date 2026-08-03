@@ -3,15 +3,16 @@
 import { useState } from "react";
 import { CompanyForm } from "@/components/admin/CompanyForm";
 import { DelistButton } from "@/components/admin/DelistButton";
+import { DeleteCompanyButton } from "@/components/admin/DeleteCompanyButton";
 import type { Company } from "@/lib/types";
 import { companyPrice } from "@/lib/types";
 
-export function CompanyRow({ company }: { company: Company }) {
+export function CompanyRow({ company, isOwner = false }: { company: Company; isOwner?: boolean }) {
   const [editing, setEditing] = useState(false);
 
   return (
     <div className="card">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <p className="font-semibold">
             {company.name} <span className="font-mono text-xs text-gray-400">{company.ticker}</span>
@@ -34,6 +35,11 @@ export function CompanyRow({ company }: { company: Company }) {
       {editing && (
         <div className="mt-3 border-t border-gray-100 dark:border-gray-700 pt-3">
           <CompanyForm company={company} onDone={() => setEditing(false)} />
+        </div>
+      )}
+      {isOwner && (
+        <div className="mt-3 border-t border-gray-100 dark:border-gray-700 pt-3">
+          <DeleteCompanyButton companyId={company.id} companyName={company.name} />
         </div>
       )}
     </div>

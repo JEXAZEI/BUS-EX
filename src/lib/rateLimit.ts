@@ -1,7 +1,7 @@
 import "server-only";
 import { and, eq, gte, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { loginAttempts } from "@/lib/db/schema";
+import { loginAttempts, trades } from "@/lib/db/schema";
 
 const WINDOW_MINUTES = 15;
 const MAX_ATTEMPTS_PER_WINDOW = 5;
@@ -53,4 +53,29 @@ export function getClientIdentifier(request: Request, username: string): string 
   const forwardedFor = request.headers.get("x-forwarded-for");
   const ip = forwardedFor ? forwardedFor.split(",")[0]!.trim() : "unknown";
   return `${username.toLowerCase()}::${ip}`;
+}
+
+const TRADE_WINDOW_SECONDS = 10;
+const MAX_TRADES_PER_WINDOW = 10;
+
+/**
+ * Simple per-user trade throttle. This is a closed classroom, not a public
+ * API, so the goal isn't stopping a determined attacker -- it's blunting an
+ * accidental double-submit or a careless script hammering the endpoint.
+ * Counts already-committed trades in the window instead of a separate
+ * attempts log, since every successful trade is already recorded in
+ * `trades`.
+ */
+export async function checkTradeRateLimit(userId: string): Promise<boolean> {
+  const since = new Date(Date.now() - TRADE_WINDOW_SECONDS * 1000);
+  try {
+    const [row] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(trades)
+      .where(and(eq(trades.userId, userId), gte(trades.createdAt, since)));
+    return (row?.count ?? 0) < MAX_TRADES_PER_WINDOW;
+  } catch (err) {
+    console.error("Trade rate limit check failed:", err);
+    return true;
+  }
 }
