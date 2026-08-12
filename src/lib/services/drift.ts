@@ -1,7 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { withTransaction, db } from "@/lib/db/client";
-import { applyPriceShock, randomInRange } from "@/lib/services/events";
+import { round, randomInRange } from "@/lib/services/events";
 import {
   getMarketRegime,
   REGIME_BIAS,
@@ -88,12 +88,16 @@ export async function applyAmbientDrift(): Promise<MarketRegime> {
         // trending. Locking first makes the second caller block until the
         // first commits, then it re-reads a now-fresh last tick and
         // correctly finds nothing left to backfill.
-        const companyRes = await client.query<{ volatility: string }>(
-          `select volatility from companies where id = $1 for update`,
-          [row.id]
-        );
+        const companyRes = await client.query<{
+          volatility: string;
+          pool_cash: string;
+          pool_shares: string;
+          is_delisted: boolean;
+        }>(`select volatility, pool_cash, pool_shares, is_delisted from companies where id = $1 for update`, [
+          row.id,
+        ]);
         const company = companyRes.rows[0];
-        if (!company) return;
+        if (!company || company.is_delisted) return;
 
         const lastTickRes = await client.query<{ last_tick: Date }>(
           `select coalesce(max(recorded_at), (select created_at from companies where id = $1)) as last_tick
@@ -104,12 +108,48 @@ export async function applyAmbientDrift(): Promise<MarketRegime> {
         const ticks = Math.min(Math.floor((now - lastTick) / intervalMs), MAX_CATCHUP_TICKS);
         if (ticks < 1) return;
 
+        // Compute the whole catch-up sequence in memory and only round-trip
+        // to the database twice (one update, one batched multi-row insert)
+        // instead of once per tick. A single stale company can need up to
+        // MAX_CATCHUP_TICKS ticks, each previously costing 3 sequential
+        // round trips via applyPriceShock -- for a class that's sat idle
+        // for a few days across every company at once, that added up to
+        // thousands of sequential round trips in one page load. Locally
+        // that was ~4s; against Neon's real network latency from a Vercel
+        // function it's easily enough to blow past the serverless timeout,
+        // which kills the response mid-stream -- something a browser
+        // reports as a corrupted/truncated stream, not a normal error. The
+        // math is identical either way (each tick's price only depends on
+        // the previous tick's price via the same factor/floor logic
+        // applyPriceShock used), this just stops doing it one DB call at a
+        // time.
         const volatility = parseFloat(company.volatility) || 1;
+        const poolShares = parseFloat(company.pool_shares);
+        let poolCash = parseFloat(company.pool_cash);
+
+        const values: string[] = [];
+        const params: unknown[] = [];
         for (let i = 1; i <= ticks; i++) {
           const impactPct = volatility * (bias + randomInRange(noiseMin, noiseMax));
+          let factor = 1 + impactPct;
+          if (factor <= 0.01) factor = 0.01;
+          poolCash *= factor;
+
           const tickTime = new Date(Math.min(lastTick + i * intervalMs, now));
-          await applyPriceShock(client, row.id, impactPct, tickTime);
+          const price = round(poolCash / poolShares, 6);
+          const base = params.length;
+          values.push(`($${base + 1}, $${base + 2}, $${base + 3})`);
+          params.push(row.id, price, tickTime);
         }
+
+        await client.query(`update companies set pool_cash = $1, updated_at = now() where id = $2`, [
+          poolCash,
+          row.id,
+        ]);
+        await client.query(
+          `insert into price_history (company_id, price, recorded_at) values ${values.join(", ")}`,
+          params
+        );
       });
     } catch (err) {
       // One company's drift failing shouldn't block the others or the page
