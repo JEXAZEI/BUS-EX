@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentProfile } from "@/lib/session";
 import { runMarketEvent, EventError } from "@/lib/services/events";
+import { checkAndRecordRateLimit } from "@/lib/rateLimit";
 
 const schema = z.object({ templateId: z.string().uuid().nullable().optional() });
 
@@ -9,6 +10,10 @@ export async function POST(request: Request) {
   const profile = await getCurrentProfile();
   if (!profile || !profile.is_active || (profile.role !== "teacher" && profile.role !== "owner")) {
     return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+  }
+
+  if (!(await checkAndRecordRateLimit(profile.id, "admin-events-trigger", 60, 30))) {
+    return NextResponse.json({ error: "Too many requests. Slow down." }, { status: 429 });
   }
 
   let body: unknown = {};

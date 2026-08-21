@@ -3,11 +3,16 @@ import { getCurrentProfile } from "@/lib/session";
 import { companyUpsertSchema } from "@/lib/validation";
 import { adminUpsertCompany, AdminError } from "@/lib/services/admin";
 import { isUniqueViolation } from "@/lib/db/errors";
+import { checkAndRecordRateLimit } from "@/lib/rateLimit";
 
 export async function POST(request: Request) {
   const profile = await getCurrentProfile();
   if (!profile || !profile.is_active || (profile.role !== "teacher" && profile.role !== "owner")) {
     return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+  }
+
+  if (!(await checkAndRecordRateLimit(profile.id, "admin-companies", 60, 30))) {
+    return NextResponse.json({ error: "Too many requests. Slow down." }, { status: 429 });
   }
 
   let body: unknown;

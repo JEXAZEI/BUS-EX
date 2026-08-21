@@ -3,6 +3,8 @@ import { z } from "zod";
 import { getCurrentProfile } from "@/lib/session";
 import { passwordSchema } from "@/lib/validation";
 import { changeOwnPassword, ChangePasswordError } from "@/lib/services/users";
+import { createSession, setSessionCookie } from "@/lib/auth/session";
+import { checkAndRecordRateLimit } from "@/lib/rateLimit";
 
 const schema = z.object({
   currentPassword: z.string().min(1, "Current password is required").max(200),
@@ -13,6 +15,13 @@ export async function POST(request: Request) {
   const profile = await getCurrentProfile();
   if (!profile || !profile.is_active) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+
+  if (!(await checkAndRecordRateLimit(profile.id, "change-password", 15 * 60, 5))) {
+    return NextResponse.json(
+      { error: "Too many attempts. Try again in a few minutes." },
+      { status: 429 }
+    );
   }
 
   let body: unknown;
@@ -32,6 +41,12 @@ export async function POST(request: Request) {
 
   try {
     await changeOwnPassword(profile.id, parsed.data.currentPassword, parsed.data.newPassword);
+    // changeOwnPassword revokes every session for this account (including
+    // the one this request just used), so issue a fresh one for the
+    // current device -- otherwise the user would be logged out by the
+    // password change they just made.
+    const token = await createSession(profile.id);
+    await setSessionCookie(token);
     return NextResponse.json({ ok: true });
   } catch (err) {
     if (err instanceof ChangePasswordError) {

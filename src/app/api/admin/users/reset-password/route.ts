@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getCurrentProfile } from "@/lib/session";
 import { resetUserPassword } from "@/lib/services/users";
 import { passwordSchema } from "@/lib/validation";
+import { checkAndRecordRateLimit } from "@/lib/rateLimit";
 
 const schema = z.object({ userId: z.string().uuid(), newPassword: passwordSchema });
 
@@ -12,6 +13,10 @@ export async function POST(request: Request) {
   const profile = await getCurrentProfile();
   if (!profile || !profile.is_active || profile.role !== "owner") {
     return NextResponse.json({ error: "Owner access required" }, { status: 403 });
+  }
+
+  if (!(await checkAndRecordRateLimit(profile.id, "admin-users-reset-password", 60, 20))) {
+    return NextResponse.json({ error: "Too many requests. Slow down." }, { status: 429 });
   }
 
   let body: unknown;

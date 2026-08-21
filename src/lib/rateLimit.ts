@@ -1,7 +1,7 @@
 import "server-only";
 import { and, eq, gte, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { loginAttempts, trades } from "@/lib/db/schema";
+import { apiHits, loginAttempts, trades } from "@/lib/db/schema";
 
 const WINDOW_MINUTES = 15;
 const MAX_ATTEMPTS_PER_WINDOW = 5;
@@ -78,4 +78,42 @@ export async function checkTradeRateLimit(userId: string): Promise<boolean> {
     console.error("Trade rate limit check failed:", err);
     return true;
   }
+}
+
+/**
+ * General-purpose rate limiter for any route: caps a given identifier to
+ * `maxRequests` allowed calls per `windowSeconds`, logging one row per
+ * *allowed* request to api_hits. Unlike checkTradeRateLimit (which counts
+ * an existing table trades already writes to), most routes don't have a
+ * natural table to count against, so this keeps its own log. Fails open on
+ * a DB error for the same reason checkLoginRateLimit does -- a transient
+ * outage shouldn't lock everyone out of the whole app.
+ */
+export async function checkAndRecordRateLimit(
+  identifier: string,
+  route: string,
+  windowSeconds: number,
+  maxRequests: number
+): Promise<boolean> {
+  const since = new Date(Date.now() - windowSeconds * 1000);
+  try {
+    const [row] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(apiHits)
+      .where(and(eq(apiHits.identifier, identifier), eq(apiHits.route, route), gte(apiHits.createdAt, since)));
+
+    if ((row?.count ?? 0) >= maxRequests) return false;
+
+    await db.insert(apiHits).values({ identifier, route });
+    return true;
+  } catch (err) {
+    console.error(`Rate limit check failed for ${route}:`, err);
+    return true;
+  }
+}
+
+/** Client IP for rate-limiting routes with no session yet (e.g. signup). */
+export function getClientIp(request: Request): string {
+  const forwardedFor = request.headers.get("x-forwarded-for");
+  return forwardedFor ? forwardedFor.split(",")[0]!.trim() : "unknown";
 }

@@ -3,8 +3,22 @@ import { signupSchema } from "@/lib/validation";
 import { signupUser, SignupError } from "@/lib/services/auth";
 import { createSession, setSessionCookie } from "@/lib/auth/session";
 import { isUniqueViolation } from "@/lib/db/errors";
+import { checkAndRecordRateLimit, getClientIp } from "@/lib/rateLimit";
 
 export async function POST(request: Request) {
+  // By IP, not username -- there's no account yet to key on. The threshold
+  // is generous (not the tight 5-per-15-min login uses) because a whole
+  // class often signs up back-to-back from the same school WiFi, which
+  // NATs many students behind one public IP; this only needs to stop a
+  // scripted mass-account-creation run, not a real classroom's first day.
+  const ip = getClientIp(request);
+  if (!(await checkAndRecordRateLimit(ip, "signup", 10 * 60, 30))) {
+    return NextResponse.json(
+      { error: "Too many signups from this network. Try again in a few minutes." },
+      { status: 429 }
+    );
+  }
+
   let body: unknown;
   try {
     body = await request.json();

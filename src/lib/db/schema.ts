@@ -200,3 +200,21 @@ export const loginAttempts = pgTable(
     identifierIdx: index("login_attempts_identifier_idx").on(t.identifier, t.attemptedAt),
   })
 );
+
+// Generic per-route rate-limit log (src/lib/rateLimit.ts) -- one row per
+// allowed request, so a route can cap "N requests per window" for a given
+// identifier (usually a user id, or client IP for unauthenticated routes)
+// without needing a dedicated table per route the way login_attempts/trades
+// already do for login and trading specifically.
+export const apiHits = pgTable(
+  "api_hits",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    identifier: text("identifier").notNull(),
+    route: text("route").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    identifierRouteIdx: index("api_hits_identifier_route_idx").on(t.identifier, t.route, t.createdAt),
+  })
+);

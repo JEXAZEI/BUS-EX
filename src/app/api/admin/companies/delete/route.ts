@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentProfile } from "@/lib/session";
 import { adminDeleteCompany, AdminError } from "@/lib/services/admin";
+import { checkAndRecordRateLimit } from "@/lib/rateLimit";
 
 const schema = z.object({ companyId: z.string().uuid() });
 
@@ -12,6 +13,10 @@ export async function POST(request: Request) {
   const profile = await getCurrentProfile();
   if (!profile || !profile.is_active || profile.role !== "owner") {
     return NextResponse.json({ error: "Owner access required" }, { status: 403 });
+  }
+
+  if (!(await checkAndRecordRateLimit(profile.id, "admin-companies-delete", 60, 30))) {
+    return NextResponse.json({ error: "Too many requests. Slow down." }, { status: 429 });
   }
 
   let body: unknown;

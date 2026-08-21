@@ -195,3 +195,15 @@ create table login_attempts (
 );
 
 create index login_attempts_identifier_idx on login_attempts (identifier, attempted_at desc);
+
+-- Generic per-route rate-limit log (src/lib/rateLimit.ts) -- one row per
+-- allowed request, so a route can cap "N requests per window" for a given
+-- identifier without needing a dedicated table per route.
+create table api_hits (
+  id bigint generated always as identity primary key,
+  identifier text not null,
+  route text not null,
+  created_at timestamptz not null default now()
+);
+
+create index api_hits_identifier_route_idx on api_hits (identifier, route, created_at desc);

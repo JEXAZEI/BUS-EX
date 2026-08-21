@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentProfile } from "@/lib/session";
 import { deleteUser } from "@/lib/services/users";
+import { checkAndRecordRateLimit } from "@/lib/rateLimit";
 
 const schema = z.object({ userId: z.string().uuid() });
 
@@ -12,6 +13,11 @@ export async function POST(request: Request) {
   const profile = await getCurrentProfile();
   if (!profile || !profile.is_active || profile.role !== "owner") {
     return NextResponse.json({ error: "Owner access required" }, { status: 403 });
+  }
+
+  // Permanent and irreversible, unlike /deactivate -- kept tighter.
+  if (!(await checkAndRecordRateLimit(profile.id, "admin-users-delete", 60, 10))) {
+    return NextResponse.json({ error: "Too many requests. Slow down." }, { status: 429 });
   }
 
   let body: unknown;
