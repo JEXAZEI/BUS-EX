@@ -6,13 +6,16 @@ import { isUniqueViolation } from "@/lib/db/errors";
 import { checkAndRecordRateLimit, getClientIp } from "@/lib/rateLimit";
 
 export async function POST(request: Request) {
-  // By IP, not username -- there's no account yet to key on. The threshold
-  // is generous (not the tight 5-per-15-min login uses) because a whole
-  // class often signs up back-to-back from the same school WiFi, which
-  // NATs many students behind one public IP; this only needs to stop a
-  // scripted mass-account-creation run, not a real classroom's first day.
+  // By IP, not username -- there's no account yet to key on. The cap is
+  // deliberately very loose because school WiFi NATs an entire class (often
+  // several classes) behind one public IP, so a normal day-one signup rush
+  // looks identical to an attack from the server's point of view. The cost
+  // asymmetry decides it: blocking a script is a small win, while locking a
+  // real class out mid-period is a genuine failure. 200/10min still stops a
+  // runaway script (which would attempt orders of magnitude more) while
+  // clearing any realistic classroom, including overlapping periods.
   const ip = getClientIp(request);
-  if (!(await checkAndRecordRateLimit(ip, "signup", 10 * 60, 30))) {
+  if (!(await checkAndRecordRateLimit(ip, "signup", 10 * 60, 200))) {
     return NextResponse.json(
       { error: "Too many signups from this network. Try again in a few minutes." },
       { status: 429 }
