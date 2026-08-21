@@ -12,15 +12,82 @@ export const usernameSchema = z
   .max(50, "Username must be at most 50 characters")
   .regex(/^[a-zA-Z0-9._%+@-]+$/, "Username can only contain letters, numbers, and . _ % + @ -");
 
+// Deliberately a denylist of the genuinely-obvious rather than a complexity
+// rule (no "must contain a symbol"). Complexity rules mostly produce
+// forgotten passwords and password-reset requests, which in a 1-hour class
+// period costs a student real trading time; blocking the handful of
+// passwords an attacker would actually guess first gets most of the benefit
+// at almost none of the cost. Entries are stored lowercase and compared
+// case-insensitively, so "Password1" is caught by "password1".
+//
+// Only the 8+ character entries can ever actually be reached (shorter ones
+// fail the length rule first), but the short ones are kept so the list stays
+// correct if that minimum ever changes. The school-flavored entries near the
+// end are here because they're exactly what students pick in practice.
+const COMMON_PASSWORDS = new Set([
+  "password", "password1", "password12", "password123", "passw0rd", "p@ssword",
+  "p@ssw0rd", "12345678", "123456789", "1234567890", "87654321", "11111111",
+  "00000000", "12341234", "qwerty123", "qwertyui", "qwertyuiop", "1qaz2wsx",
+  "zaq12wsx", "1q2w3e4r", "qazwsxedc", "asdfghjk", "asdfghjkl", "asdfasdf",
+  "iloveyou", "princess", "sunshine", "football", "baseball", "basketball",
+  "superman", "batman123", "welcome1", "welcome123", "letmein1", "letmein12",
+  "letmein123", "admin123", "administrator", "abc12345", "abcd1234",
+  "monkey123", "trustno1", "dragon123", "starwars", "whatever", "computer",
+  "internet", "freedom1", "shadow123", "master123", "changeme", "changeme1",
+  "default1", "guest123", "test1234", "testtest", "temp1234",
+  // Classroom-specific guesses.
+  "school123", "student1", "student12", "student123", "teacher1", "teacher12",
+  "teacher123", "homework1", "homework123", "busex123", "stockmarket",
+]);
+
+export function isCommonPassword(password: string): boolean {
+  return COMMON_PASSWORDS.has(password.trim().toLowerCase());
+}
+
+/**
+ * Blocks a password that is just the account's own username -- the single
+ * most likely "so I don't forget it" choice. Also checks the local part of
+ * an email-style username (the bit before the @), since admin accounts here
+ * use full email addresses and "ar9654" is the memorable half of
+ * "ar9654@susd12.org".
+ *
+ * Deliberately an exact-match test, not a substring one: rejecting anything
+ * merely *containing* the username would block reasonable passwords like
+ * "johnsbigadventure" for user "john", and a confusing rejection mid-class
+ * is worse than a slightly weak password in a fake-money game.
+ */
+export function passwordMatchesUsername(password: string, username: string): boolean {
+  const pw = password.trim().toLowerCase();
+  const user = username.trim().toLowerCase();
+  if (!pw || !user) return false;
+  if (pw === user) return true;
+
+  const localPart = user.split("@")[0]!;
+  return localPart.length >= 4 && pw === localPart;
+}
+
 export const passwordSchema = z
   .string()
   .min(8, "Password must be at least 8 characters")
-  .max(72, "Password must be at most 72 characters");
+  .max(72, "Password must be at most 72 characters")
+  .refine((pw) => !isCommonPassword(pw), {
+    message: "That password is too easy to guess. Please pick a different one.",
+  });
 
-export const signupSchema = z.object({
-  username: usernameSchema,
-  password: passwordSchema,
-});
+export const signupSchema = z
+  .object({
+    username: usernameSchema,
+    password: passwordSchema,
+  })
+  .superRefine((data, ctx) => {
+    if (passwordMatchesUsername(data.password, data.username)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["password"],
+        message: "Your password can't be the same as your username.",
+      });
+    }
+  });
 
 export const loginSchema = z.object({
   username: usernameSchema,

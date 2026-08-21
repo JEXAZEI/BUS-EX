@@ -3,8 +3,12 @@ import { eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { sessions, users } from "@/lib/db/schema";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
+import { passwordMatchesUsername } from "@/lib/validation";
 
 export class ChangePasswordError extends Error {}
+
+/** Thrown when a new password is rejected by policy (see src/lib/validation.ts). */
+export class PasswordPolicyError extends Error {}
 
 export async function findUserByUsername(username: string) {
   const rows = await db
@@ -24,6 +28,16 @@ export async function findUserByUsername(username: string) {
  * changes underneath them.
  */
 export async function resetUserPassword(userId: string, newPassword: string): Promise<void> {
+  // The route already ran passwordSchema (length + common-password denylist),
+  // but the username check needs the *target* user's name, which only exists
+  // here -- the route just has a userId. One extra read on a rare, admin-only
+  // action.
+  const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  if (!user) throw new PasswordPolicyError("Account not found");
+  if (passwordMatchesUsername(newPassword, user.username)) {
+    throw new PasswordPolicyError("That password can't be the same as the username.");
+  }
+
   const passwordHash = await hashPassword(newPassword);
   await db.update(users).set({ passwordHash }).where(eq(users.id, userId));
   await db.delete(sessions).where(eq(sessions.userId, userId));
@@ -46,6 +60,13 @@ export async function changeOwnPassword(
 
   const currentOk = await verifyPassword(currentPassword, user.passwordHash);
   if (!currentOk) throw new ChangePasswordError("Current password is incorrect");
+
+  // Username check lives here rather than in the route's zod schema because
+  // the request body only carries the passwords -- the username comes from
+  // the user row already fetched above, so this costs nothing extra.
+  if (passwordMatchesUsername(newPassword, user.username)) {
+    throw new ChangePasswordError("Your password can't be the same as your username.");
+  }
 
   const passwordHash = await hashPassword(newPassword);
   await db.update(users).set({ passwordHash }).where(eq(users.id, userId));

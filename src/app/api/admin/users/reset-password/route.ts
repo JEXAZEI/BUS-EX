@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentProfile } from "@/lib/session";
-import { resetUserPassword } from "@/lib/services/users";
+import { resetUserPassword, PasswordPolicyError } from "@/lib/services/users";
 import { passwordSchema } from "@/lib/validation";
 import { checkAndRecordRateLimit } from "@/lib/rateLimit";
 
@@ -34,6 +34,14 @@ export async function POST(request: Request) {
     );
   }
 
-  await resetUserPassword(parsed.data.userId, parsed.data.newPassword);
-  return NextResponse.json({ ok: true });
+  try {
+    await resetUserPassword(parsed.data.userId, parsed.data.newPassword);
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    if (err instanceof PasswordPolicyError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
+    console.error("Password reset failed:", err);
+    return NextResponse.json({ error: "Failed to reset password" }, { status: 500 });
+  }
 }
