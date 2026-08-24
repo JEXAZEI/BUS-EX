@@ -4,6 +4,28 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Profile } from "@/lib/types";
 
+// Words picked to be unambiguous when read aloud across a classroom -- no
+// homophones, no letters that sound alike, nothing that needs spelling out.
+// A teacher resetting a password has to say the result to the student, which
+// is exactly why the obvious choices ("student123") are the ones the
+// denylist in validation.ts blocks; this gives them a safe alternative
+// instead of a guessing game.
+const SUGGEST_ADJECTIVES = [
+  "Blue", "Swift", "Bright", "Quiet", "Brave", "Golden", "Silver", "Rapid",
+  "Clever", "Sunny", "Mighty", "Nimble",
+];
+const SUGGEST_NOUNS = [
+  "Falcon", "Comet", "Harbor", "Canyon", "Rocket", "Anchor", "Summit",
+  "Meadow", "Lantern", "Compass", "Thunder", "Marble",
+];
+
+/** Adjective + Noun + 2 digits, e.g. "SwiftFalcon72" -- always 8+ chars and never on the denylist. */
+function suggestPassword(): string {
+  const pick = <T,>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)]!;
+  const digits = String(Math.floor(Math.random() * 90) + 10);
+  return `${pick(SUGGEST_ADJECTIVES)}${pick(SUGGEST_NOUNS)}${digits}`;
+}
+
 export function UserRow({ user }: { user: Profile }) {
   const router = useRouter();
   const [showReset, setShowReset] = useState(false);
@@ -92,22 +114,43 @@ export function UserRow({ user }: { user: Profile }) {
       </div>
 
       {showReset && (
-        <form onSubmit={resetPassword} className="mt-3 flex items-end gap-2 border-t border-gray-100 dark:border-gray-700 pt-3">
-          <div className="flex-1">
-            <label className="label">New password</label>
-            <input
-              className="input"
-              type="text"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              minLength={8}
-              required
-            />
-          </div>
-          <button type="submit" className="btn-primary" disabled={loading}>
-            Set
-          </button>
-        </form>
+        <div className="mt-3 border-t border-gray-100 dark:border-gray-700 pt-3">
+          <form onSubmit={resetPassword} className="flex items-end gap-2">
+            <div className="flex-1">
+              <label className="label">New password</label>
+              <input
+                className="input"
+                type="text"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                minLength={8}
+                required
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setNewPassword(suggestPassword());
+                setError(null);
+              }}
+              className="btn-secondary"
+              disabled={loading}
+            >
+              Suggest
+            </button>
+            <button type="submit" className="btn-primary" disabled={loading}>
+              Set
+            </button>
+          </form>
+          {/* Kept directly under the form rather than at the bottom of the
+              card: a rejected password ("too easy to guess") is only useful
+              if the person who just typed it actually sees why. */}
+          {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+          <p className="mt-1 text-xs text-gray-400">
+            Very common passwords (like &quot;student123&quot;) are rejected. Use Suggest for one
+            that&apos;s easy to read aloud.
+          </p>
+        </div>
       )}
 
       {user.role === "student" && (
@@ -135,7 +178,10 @@ export function UserRow({ user }: { user: Profile }) {
         </div>
       )}
 
-      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+      {/* `error` is shared by every action on this card, but the reset form
+          renders its own copy inline, so skip this one while that form is
+          open or the same message would appear twice. */}
+      {error && !showReset && <p className="mt-2 text-sm text-red-600">{error}</p>}
       {message && <p className="mt-2 text-sm delta-up">{message}</p>}
     </div>
   );
