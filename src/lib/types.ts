@@ -11,6 +11,8 @@ export type EventType =
 export interface Profile {
   id: string;
   username: string;
+  full_name: string;
+  email: string;
   role: UserRole;
   cash_balance: number;
   is_active: boolean;

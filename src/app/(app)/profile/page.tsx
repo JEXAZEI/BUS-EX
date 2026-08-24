@@ -75,8 +75,10 @@ export default async function ProfilePage() {
     <div className="space-y-4">
       <AutoRefresh />
       <div>
-        <h1 className="text-xl font-bold tracking-tight">@{profile.username}</h1>
-        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">{profile.role} account</p>
+        <h1 className="text-xl font-bold tracking-tight">{profile.full_name}</h1>
+        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+          {profile.role} account &middot; @{profile.username}
+        </p>
       </div>
 
       <div className="grid grid-cols-3 gap-2">

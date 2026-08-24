@@ -26,6 +26,8 @@ export function toProfile(row: UserRow): Profile {
   return {
     id: row.id,
     username: row.username,
+    full_name: row.fullName,
+    email: row.email,
     role: row.role,
     cash_balance: num(row.cashBalance),
     is_active: row.isActive,

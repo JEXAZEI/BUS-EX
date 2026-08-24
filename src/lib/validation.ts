@@ -66,6 +66,36 @@ export function passwordMatchesUsername(password: string, username: string): boo
   return localPart.length >= 4 && pw === localPart;
 }
 
+// Real names, so deliberately permissive about punctuation -- apostrophes
+// ("O'Brien"), hyphens ("Mary-Jane"), periods ("Jr."), and accented letters
+// are all legitimate. The \p{L} unicode class covers non-English alphabets
+// rather than silently rejecting them. Angle brackets and the like are still
+// excluded, keeping the same anti-stored-XSS guarantee usernames have.
+export const fullNameSchema = z
+  .string()
+  .trim()
+  .min(2, "Please enter your full name")
+  .max(80, "Name must be at most 80 characters")
+  .regex(/^[\p{L}\p{M}'.\- ]+$/u, "Name can only contain letters, spaces, apostrophes, and hyphens");
+
+export const emailSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .email("Please enter a valid email address")
+  .max(120, "Email must be at most 120 characters");
+
+// Login accepts either identifier, so this can't reuse usernameSchema (which
+// bans characters an email may legitimately contain) or emailSchema (which
+// would reject plain usernames). Kept loose on purpose: the lookup is a
+// parameterized exact match, and a too-strict rule here would just turn a
+// wrong-password message into a confusing validation error.
+export const loginIdentifierSchema = z
+  .string()
+  .trim()
+  .min(3, "Enter your username or email")
+  .max(120, "That's too long to be a username or email");
+
 export const passwordSchema = z
   .string()
   .min(8, "Password must be at least 8 characters")
@@ -77,20 +107,28 @@ export const passwordSchema = z
 export const signupSchema = z
   .object({
     username: usernameSchema,
+    fullName: fullNameSchema,
+    email: emailSchema,
     password: passwordSchema,
   })
   .superRefine((data, ctx) => {
-    if (passwordMatchesUsername(data.password, data.username)) {
+    // Checked against the email too, not just the username -- now that an
+    // account has two login identifiers, "password == my email" is exactly
+    // as guessable as "password == my username" was.
+    if (
+      passwordMatchesUsername(data.password, data.username) ||
+      passwordMatchesUsername(data.password, data.email)
+    ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["password"],
-        message: "Your password can't be the same as your username.",
+        message: "Your password can't be the same as your username or email.",
       });
     }
   });
 
 export const loginSchema = z.object({
-  username: usernameSchema,
+  identifier: loginIdentifierSchema,
   password: z.string().min(1, "Password is required").max(200),
 });
 

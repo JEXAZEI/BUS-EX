@@ -4,9 +4,9 @@ import { db } from "@/lib/db/client";
 import { getLeaderboard } from "@/lib/services/leaderboard";
 
 export interface TermRecap {
-  topTraders: { username: string; netWorth: number }[];
-  mostActive: { username: string; tradeCount: number } | null;
-  biggestTrade: { username: string; ticker: string; side: string; cashAmount: number } | null;
+  topTraders: { name: string; netWorth: number }[];
+  mostActive: { name: string; tradeCount: number } | null;
+  biggestTrade: { name: string; ticker: string; side: string; cashAmount: number } | null;
   topPerformer: { name: string; ticker: string; pctGain: number } | null;
 }
 
@@ -19,28 +19,28 @@ export async function getTermRecap(): Promise<TermRecap> {
   const leaderboard = await getLeaderboard();
   const topTraders = leaderboard
     .slice(0, 3)
-    .map((e) => ({ username: e.username, netWorth: e.netWorth }));
+    .map((e) => ({ name: e.fullName, netWorth: e.netWorth }));
 
-  const mostActiveResult = await db.execute<{ username: string; trade_count: string }>(sql`
-    select u.username, count(*) as trade_count
+  const mostActiveResult = await db.execute<{ full_name: string; trade_count: string }>(sql`
+    select u.full_name, count(*) as trade_count
     from trades t
     join users u on u.id = t.user_id
-    group by u.username
+    group by u.full_name
     order by trade_count desc
     limit 1
   `);
   const mostActiveRow = mostActiveResult.rows[0];
   const mostActive = mostActiveRow
-    ? { username: mostActiveRow.username, tradeCount: parseInt(mostActiveRow.trade_count, 10) }
+    ? { name: mostActiveRow.full_name, tradeCount: parseInt(mostActiveRow.trade_count, 10) }
     : null;
 
   const biggestTradeResult = await db.execute<{
-    username: string;
+    full_name: string;
     ticker: string;
     side: string;
     cash_amount: string;
   }>(sql`
-    select u.username, c.ticker, t.side, t.cash_amount
+    select u.full_name, c.ticker, t.side, t.cash_amount
     from trades t
     join users u on u.id = t.user_id
     join companies c on c.id = t.company_id
@@ -50,7 +50,7 @@ export async function getTermRecap(): Promise<TermRecap> {
   const biggestRow = biggestTradeResult.rows[0];
   const biggestTrade = biggestRow
     ? {
-        username: biggestRow.username,
+        name: biggestRow.full_name,
         ticker: biggestRow.ticker,
         side: biggestRow.side,
         cashAmount: parseFloat(biggestRow.cash_amount),

@@ -70,20 +70,20 @@ export function ResetGameButton() {
               <li>
                 <span className="font-medium">Top traders:</span>{" "}
                 {recap.topTraders
-                  .map((t, i) => `${["🥇", "🥈", "🥉"][i]} @${t.username} ($${t.netWorth.toFixed(2)})`)
+                  .map((t, i) => `${["🥇", "🥈", "🥉"][i]} ${t.name} ($${t.netWorth.toFixed(2)})`)
                   .join(", ")}
               </li>
             )}
             {recap.mostActive && (
               <li>
-                <span className="font-medium">Most active trader:</span> @{recap.mostActive.username}{" "}
+                <span className="font-medium">Most active trader:</span> {recap.mostActive.name}{" "}
                 ({recap.mostActive.tradeCount} trades)
               </li>
             )}
             {recap.biggestTrade && (
               <li>
-                <span className="font-medium">Biggest single trade:</span> @
-                {recap.biggestTrade.username} {recap.biggestTrade.side === "buy" ? "bought" : "sold"}{" "}
+                <span className="font-medium">Biggest single trade:</span>{" "}
+                {recap.biggestTrade.name} {recap.biggestTrade.side === "buy" ? "bought" : "sold"}{" "}
                 {recap.biggestTrade.ticker} for ${recap.biggestTrade.cashAmount.toFixed(2)}
               </li>
             )}

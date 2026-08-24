@@ -148,3 +148,11 @@ export async function isUsernameAvailable(username: string): Promise<boolean> {
   );
   return !rows.rows[0]?.exists;
 }
+
+/** True if no user currently has this email (case-insensitive). */
+export async function isEmailAvailable(email: string): Promise<boolean> {
+  const rows = await db.execute<{ exists: boolean }>(
+    sql`select exists(select 1 from users where lower(email) = lower(${email})) as exists`
+  );
+  return !rows.rows[0]?.exists;
+}

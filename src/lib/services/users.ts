@@ -10,11 +10,24 @@ export class ChangePasswordError extends Error {}
 /** Thrown when a new password is rejected by policy (see src/lib/validation.ts). */
 export class PasswordPolicyError extends Error {}
 
-export async function findUserByUsername(username: string) {
+/**
+ * Resolves a login identifier, which may be either a username or an email.
+ *
+ * Both are unique case-insensitively (see the indexes in db/schema.sql), but
+ * nothing stops one person's username from equalling another person's email,
+ * so the ordering matters: an exact username match wins over an email match.
+ * Without that tiebreak the row returned would depend on Postgres's scan
+ * order, which is not stable -- and "which account did I just log into" is
+ * not something to leave to chance.
+ */
+export async function findUserByIdentifier(identifier: string) {
   const rows = await db
     .select()
     .from(users)
-    .where(sql`lower(${users.username}) = lower(${username})`)
+    .where(
+      sql`lower(${users.username}) = lower(${identifier}) or lower(${users.email}) = lower(${identifier})`
+    )
+    .orderBy(sql`(lower(${users.username}) = lower(${identifier})) desc`)
     .limit(1);
   return rows[0] ?? null;
 }

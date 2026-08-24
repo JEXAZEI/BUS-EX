@@ -55,6 +55,12 @@ insert into game_settings (id, default_starting_cash) values (1, 1000);
 create table users (
   id uuid primary key default gen_random_uuid(),
   username text not null unique,
+  -- Real name, shown instead of the username everywhere a person appears
+  -- (leaderboard, profile, admin) so a teacher can tell who is who.
+  full_name text not null,
+  -- A second login identifier: people can sign in with either username or
+  -- email (see findUserByIdentifier in src/lib/services/users.ts).
+  email text not null,
   password_hash text not null,
   role user_role not null default 'student',
   cash_balance numeric(14, 2) not null default 1000,
@@ -63,7 +69,11 @@ create table users (
 );
 
 create index users_role_idx on users (role);
+-- Both identifiers are matched case-insensitively at login, so uniqueness has
+-- to be enforced case-insensitively too -- otherwise "Sam@x.org" and
+-- "sam@x.org" could both exist and a login would be ambiguous.
 create unique index users_username_lower_idx on users (lower(username));
+create unique index users_email_lower_idx on users (lower(email));
 
 -- Opaque server-side sessions. The httpOnly cookie holds the raw random
 -- token; only its SHA-256 hash is ever stored here, so a database leak

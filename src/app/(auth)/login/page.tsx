@@ -7,7 +7,7 @@ import Link from "next/link";
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [username, setUsername] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(
     searchParams.get("disabled") ? "This account has been disabled. Contact your teacher." : null
@@ -22,7 +22,7 @@ function LoginForm() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ identifier, password }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -43,15 +43,15 @@ function LoginForm() {
       <h2 className="mb-4 text-lg font-semibold">Log in</h2>
       <form onSubmit={onSubmit} className="space-y-4">
         <div>
-          <label className="label" htmlFor="username">Username</label>
+          <label className="label" htmlFor="identifier">Username or email</label>
           <input
-            id="username"
+            id="identifier"
             className="input"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
+            value={identifier}
+            onChange={(e) => setIdentifier(e.target.value)}
             autoComplete="username"
             required
-            maxLength={50}
+            maxLength={120}
           />
         </div>
         <div>

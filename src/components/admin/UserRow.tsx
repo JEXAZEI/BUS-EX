@@ -91,7 +91,8 @@ export function UserRow({ user }: { user: Profile }) {
       <div className="flex items-center justify-between">
         <div>
           <p className="font-semibold">
-            @{user.username}{" "}
+            {user.full_name}{" "}
+            <span className="font-mono text-xs font-normal text-gray-400">@{user.username}</span>{" "}
             <span className="text-xs font-normal capitalize text-gray-400">{user.role}</span>
             {!user.is_active && (
               <span className="ml-2 badge-muted">
@@ -162,7 +163,7 @@ export function UserRow({ user }: { user: Profile }) {
           ) : (
             <div className="alert-danger p-2">
               <p className="mb-2 text-xs text-red-800 dark:text-red-300">
-                This permanently deletes @{user.username} and all their trade history. Cannot be
+                This permanently deletes {user.full_name} (@{user.username}) and all their trade history. Cannot be
                 undone.
               </p>
               <div className="flex gap-2">

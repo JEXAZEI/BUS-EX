@@ -6,7 +6,7 @@ import { useState } from "react";
 import type { UserRole } from "@/lib/types";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
-export function Navbar({ username, role }: { username: string; role: UserRole }) {
+export function Navbar({ displayName, role }: { displayName: string; role: UserRole }) {
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -48,7 +48,7 @@ export function Navbar({ username, role }: { username: string; role: UserRole })
               {l.label}
             </Link>
           ))}
-          <span className="ml-2 font-mono text-sm text-gray-400">@{username}</span>
+          <span className="ml-2 text-sm text-gray-400">{displayName}</span>
           <ThemeToggle className="ml-2" />
           <button onClick={logout} className="btn-secondary ml-2">
             Log out
@@ -84,7 +84,7 @@ export function Navbar({ username, role }: { username: string; role: UserRole })
               {l.label}
             </Link>
           ))}
-          <span className="px-3 py-1 font-mono text-sm text-gray-400">@{username}</span>
+          <span className="px-3 py-1 text-sm text-gray-400">{displayName}</span>
           <button onClick={logout} className="btn-secondary mx-3 mt-1">
             Log out
           </button>

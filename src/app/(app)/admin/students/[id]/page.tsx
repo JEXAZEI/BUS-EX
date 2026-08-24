@@ -21,9 +21,12 @@ export default async function AdminStudentDetailPage({ params }: { params: Promi
 
       <div>
         <h1 className="text-xl font-bold tracking-tight">
-          @{student.username}
+          {student.fullName}
           {!student.isActive && <span className="badge-muted ml-2">Inactive</span>}
         </h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          @{student.username} &middot; {student.email}
+        </p>
         <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
           Read-only view -- no trades can be placed from here
         </p>

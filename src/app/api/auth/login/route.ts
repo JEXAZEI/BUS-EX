@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { loginSchema } from "@/lib/validation";
 import { checkLoginRateLimit, recordLoginAttempt, getClientIdentifier } from "@/lib/rateLimit";
-import { findUserByUsername } from "@/lib/services/users";
+import { findUserByIdentifier } from "@/lib/services/users";
 import { verifyPassword } from "@/lib/auth/password";
 import { createSession, setSessionCookie } from "@/lib/auth/session";
 
-const GENERIC_ERROR = "Invalid username or password";
+// Deliberately identical for "no such account" and "wrong password", so the
+// response can't be used to discover which usernames or emails exist.
+const GENERIC_ERROR = "Invalid login or password";
 
 export async function POST(request: Request) {
   let body: unknown;
@@ -19,8 +21,8 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: GENERIC_ERROR }, { status: 400 });
   }
-  const { username, password } = parsed.data;
-  const identifier = getClientIdentifier(request, username);
+  const { identifier: loginId, password } = parsed.data;
+  const identifier = getClientIdentifier(request, loginId);
 
   const rateLimit = await checkLoginRateLimit(identifier);
   if (!rateLimit.allowed) {
@@ -30,7 +32,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const user = await findUserByUsername(username);
+  const user = await findUserByIdentifier(loginId);
   if (!user) {
     await recordLoginAttempt(identifier, false);
     return NextResponse.json({ error: GENERIC_ERROR }, { status: 401 });

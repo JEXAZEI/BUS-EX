@@ -42,6 +42,10 @@ export const users = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     username: text("username").notNull().unique(),
+    // Shown instead of the username wherever a person appears in the UI.
+    fullName: text("full_name").notNull(),
+    // Second login identifier -- username or email both work.
+    email: text("email").notNull(),
     passwordHash: text("password_hash").notNull(),
     role: userRole("role").notNull().default("student"),
     cashBalance: numeric("cash_balance", { precision: 14, scale: 2 }).notNull().default("1000"),

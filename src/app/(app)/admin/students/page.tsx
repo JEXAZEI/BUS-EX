@@ -38,7 +38,10 @@ export default async function AdminStudentsPage() {
                       href={`/admin/students/${s.id}`}
                       className="flex items-center gap-2 px-4 py-3 group-hover:bg-gray-50 dark:group-hover:bg-white/5"
                     >
-                      @{s.username}
+                      <span>
+                        {s.fullName}
+                        <span className="ml-2 font-mono text-xs text-gray-400">@{s.username}</span>
+                      </span>
                       {!s.isActive && <span className="badge-muted">Inactive</span>}
                     </Link>
                   </td>

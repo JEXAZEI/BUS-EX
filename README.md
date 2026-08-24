@@ -91,17 +91,21 @@ form for them. Instead, create them directly with a bcrypt-hashed password:
    available.)
 2. In Neon's SQL Editor, run:
    ```sql
-   insert into users (username, password_hash, role, cash_balance)
-   values ('YOUR_USERNAME_HERE', 'PASTE_THE_HASH_HERE', 'owner', 1000);
+   insert into users (username, full_name, email, password_hash, role, cash_balance)
+   values ('YOUR_USERNAME_HERE', 'Your Name', 'you@school.org',
+           'PASTE_THE_HASH_HERE', 'owner', 1000);
    ```
-   Use `'teacher'` instead of `'owner'` for the teacher account. Username can
-   be anything unique (an email address works fine, or a plain name) — it's
-   just what you type into the login form, there's no real inbox involved.
-3. Log in at `/login` with that username and password.
+   Use `'teacher'` instead of `'owner'` for the teacher account.
+   - `username` and `email` must each be unique, and you can sign in with
+     **either** one. There's no real inbox involved — nothing is ever sent to
+     the address; it's just a second thing you're allowed to type at login.
+   - `full_name` is what's shown on the leaderboard, profile, and admin pages
+     instead of the username.
+3. Log in at `/login` with either the username or the email, plus the password.
 
 To add more admins later (e.g. a co-teacher), repeat step 2 with a new
-username/role. To change an existing admin's password later, generate a new
-hash and `update users set password_hash = '...' where username = '...';`.
+username/email/role. To change an existing admin's password later, generate a
+new hash and `update users set password_hash = '...' where username = '...';`.
 
 **Don't commit real password hashes to a public repo.** Even though bcrypt
 hashes aren't trivially reversible, a hash of a weak/guessable password (like

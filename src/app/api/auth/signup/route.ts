@@ -37,10 +37,10 @@ export async function POST(request: Request) {
     );
   }
 
-  const { username, password } = parsed.data;
+  const { username, fullName, email, password } = parsed.data;
 
   try {
-    const user = await signupUser(username, password);
+    const user = await signupUser({ username, fullName, email, password });
     const token = await createSession(user.id);
     await setSessionCookie(token);
     return NextResponse.json({ ok: true }, { status: 200 });
@@ -49,8 +49,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: err.message }, { status: 409 });
     }
     // Unique constraint race (two signups for the same username at once).
+    // Race fallback: signupUser already checks both, so reaching here means a
+    // simultaneous signup claimed the username or the email between that
+    // check and the insert. The database doesn't tell us which cheaply, so the
+    // message covers both.
     if (isUniqueViolation(err)) {
-      return NextResponse.json({ error: "That username is already taken" }, { status: 409 });
+      return NextResponse.json(
+        { error: "That username or email is already taken" },
+        { status: 409 }
+      );
     }
     console.error("Signup failed:", err);
     return NextResponse.json({ error: "Could not create your account. Try again." }, { status: 500 });

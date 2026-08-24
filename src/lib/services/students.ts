@@ -6,6 +6,8 @@ import { companies as companiesTable, holdings, trades, users } from "@/lib/db/s
 export interface StudentSummary {
   id: string;
   username: string;
+  fullName: string;
+  email: string;
   isActive: boolean;
   cashBalance: number;
   netWorth: number;
@@ -16,24 +18,28 @@ export async function listStudents(): Promise<StudentSummary[]> {
   const result = await db.execute<{
     id: string;
     username: string;
+    full_name: string;
+    email: string;
     is_active: boolean;
     cash_balance: string;
     net_worth: string;
   }>(sql`
     select
-      u.id, u.username, u.is_active, u.cash_balance,
+      u.id, u.username, u.full_name, u.email, u.is_active, u.cash_balance,
       u.cash_balance + coalesce(sum(h.shares * (c.pool_cash / c.pool_shares)), 0) as net_worth
     from users u
     left join holdings h on h.user_id = u.id
     left join companies c on c.id = h.company_id
     where u.role = 'student'
-    group by u.id, u.username, u.is_active, u.cash_balance
-    order by u.username
+    group by u.id, u.username, u.full_name, u.email, u.is_active, u.cash_balance
+    order by u.full_name
   `);
 
   return result.rows.map((r) => ({
     id: r.id,
     username: r.username,
+    fullName: r.full_name,
+    email: r.email,
     isActive: r.is_active,
     cashBalance: parseFloat(r.cash_balance),
     netWorth: parseFloat(r.net_worth),
@@ -43,6 +49,8 @@ export async function listStudents(): Promise<StudentSummary[]> {
 export interface StudentDetail {
   id: string;
   username: string;
+  fullName: string;
+  email: string;
   isActive: boolean;
   cashBalance: number;
   netWorth: number;
@@ -108,6 +116,8 @@ export async function getStudentDetail(userId: string): Promise<StudentDetail | 
   return {
     id: userRow.id,
     username: userRow.username,
+    fullName: userRow.fullName,
+    email: userRow.email,
     isActive: userRow.isActive,
     cashBalance,
     netWorth: cashBalance + holdingsValue,
