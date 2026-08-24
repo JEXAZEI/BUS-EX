@@ -184,7 +184,12 @@ export function PriceChart({ data }: { data: Point[] }) {
                 cursor={{ stroke: "#9ca3af", strokeWidth: 1, strokeDasharray: "3 3" }}
               />
               <Area
-                type="monotone"
+                // "linear" (straight segments between real samples), not
+                // "monotone" -- monotone's smoothing invents a gentle curve
+                // between points, which on a short range with few samples
+                // renders the market as a lazy swoop rather than a price
+                // series. Real charts join ticks with straight lines.
+                type="linear"
                 dataKey="price"
                 stroke={stroke}
                 strokeWidth={1.75}

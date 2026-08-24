@@ -30,12 +30,14 @@ export const REGIME_DURATION_MINUTES: Record<MarketRegime, [number, number]> = {
 // tend to move faster than rallies, even though bull runs win out over the
 // term by simply lasting longer and being picked more often.
 //
-// These are per-15-minute-tick values -- a quarter of the per-hour bias
-// they'd need to be at a 60-minute tick, since bias accumulates roughly
-// additively across ticks and there are now 4x as many ticks per hour.
+// These are per-3-minute-tick values (DRIFT_INTERVAL_MINUTES in drift.ts).
+// Bias accumulates roughly additively across ticks, so going from 15-minute
+// to 3-minute ticks (5x as many per hour) means dividing each tick's bias by
+// 5 to leave the market's actual hourly trend unchanged -- the market moves
+// the same amount per hour, just sampled far more finely.
 export const REGIME_BIAS: Record<MarketRegime, number> = {
-  bull: 0.0025,
-  bear: -0.0045,
+  bull: 0.0005,
+  bear: -0.0009,
   neutral: 0,
 };
 
@@ -46,11 +48,14 @@ export const REGIME_BIAS: Record<MarketRegime, number> = {
 // meaningful share of companies buck the overall trend on any given tick,
 // not just a token few.
 //
-// Scaled down from the old 60-minute-tick range by sqrt(4) rather than 4 --
-// noise (unlike bias) accumulates like a random walk, where variance adds
-// across ticks, so halving each tick's range keeps the same net hourly
-// volatility instead of quietly making the market calmer.
-export const IDIOSYNCRATIC_DRIFT_RANGE: [number, number] = [-0.0125, 0.0125];
+// Scaled by sqrt of the tick-rate change, not the rate itself -- noise
+// (unlike bias) accumulates like a random walk, where variance rather than
+// magnitude adds across ticks. Going from 15- to 3-minute ticks is 5x as
+// many, so each tick's range shrinks by sqrt(5) ~= 2.24 to keep the same net
+// hourly volatility. Dividing by 5 instead would quietly make every stock
+// much calmer, which is exactly the "boring flat line" this change is
+// meant to fix.
+export const IDIOSYNCRATIC_DRIFT_RANGE: [number, number] = [-0.0056, 0.0056];
 
 function randomRegimeDurationMs(regime: MarketRegime): number {
   const [min, max] = REGIME_DURATION_MINUTES[regime];
