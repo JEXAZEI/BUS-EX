@@ -3,7 +3,8 @@ import { sql } from "drizzle-orm";
 import { withTransaction, db } from "@/lib/db/client";
 import { round, randomInRange } from "@/lib/services/events";
 import {
-  getMarketRegime,
+  getRegimeStatus,
+  buildRegimeTimeline,
   REGIME_BIAS,
   IDIOSYNCRATIC_DRIFT_RANGE,
   type MarketRegime,
@@ -50,8 +51,8 @@ const MAX_CATCHUP_TICKS = 1440;
  * running the whole time, even though the computation only just happened.
  */
 export async function applyAmbientDrift(): Promise<MarketRegime> {
-  const regime = await getMarketRegime();
-  const bias = REGIME_BIAS[regime];
+  const status = await getRegimeStatus();
+  const regime = status.regime;
   const [noiseMin, noiseMax] = IDIOSYNCRATIC_DRIFT_RANGE;
   const intervalMs = DRIFT_INTERVAL_MINUTES * 60_000;
 
@@ -71,6 +72,13 @@ export async function applyAmbientDrift(): Promise<MarketRegime> {
   `);
 
   const now = Date.now();
+
+  // One timeline for the whole pass, covering the longest gap any company
+  // could be backfilling. The regime is market-wide, so every company must
+  // agree on what the market was doing at a given minute -- building this
+  // per company would let two stocks backfill the same hour under opposite
+  // trends.
+  const timeline = buildRegimeTimeline(now - MAX_CATCHUP_TICKS * intervalMs, now, status);
 
   for (const row of candidates.rows) {
     try {
@@ -129,13 +137,26 @@ export async function applyAmbientDrift(): Promise<MarketRegime> {
 
         const values: string[] = [];
         const params: unknown[] = [];
+        // Ticks are generated in ascending time order, so walking the
+        // timeline with a cursor costs one pass rather than a lookup per
+        // tick.
+        let segmentIndex = 0;
         for (let i = 1; i <= ticks; i++) {
+          const tickMs = Math.min(lastTick + i * intervalMs, now);
+          while (
+            segmentIndex < timeline.length - 1 &&
+            tickMs >= timeline[segmentIndex]!.untilMs
+          ) {
+            segmentIndex++;
+          }
+          const bias = REGIME_BIAS[timeline[segmentIndex]!.regime];
+
           const impactPct = volatility * (bias + randomInRange(noiseMin, noiseMax));
           let factor = 1 + impactPct;
           if (factor <= 0.01) factor = 0.01;
           poolCash *= factor;
 
-          const tickTime = new Date(Math.min(lastTick + i * intervalMs, now));
+          const tickTime = new Date(tickMs);
           const price = round(poolCash / poolShares, 6);
           const base = params.length;
           values.push(`($${base + 1}, $${base + 2}, $${base + 3})`);

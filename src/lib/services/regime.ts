@@ -118,6 +118,67 @@ export async function getMarketRegime(): Promise<MarketRegime> {
   return (await getRegimeStatus()).regime;
 }
 
+/** One stretch of market history: this regime was active up until `untilMs`. */
+export interface RegimeSegment {
+  untilMs: number;
+  regime: MarketRegime;
+}
+
+// A backfill spans at most MAX_CATCHUP_TICKS (drift.ts) = 72 hours, and the
+// shortest regime runs 5 hours, so ~15 segments is the realistic worst case.
+// The cap only exists so a bad clock can't spin this loop forever.
+const MAX_TIMELINE_SEGMENTS = 64;
+
+/**
+ * Builds the sequence of regimes covering [fromMs, now], so a catch-up
+ * backfill can move through changing market conditions instead of applying
+ * one bias to the whole gap.
+ *
+ * This matters far more than it sounds. Ambient drift used to read the
+ * regime once and reuse that single bias for every backfilled tick, so the
+ * first page load after a quiet stretch replayed the entire gap under one
+ * unbroken trend. Simulated with this codebase's own numbers, a 60-hour
+ * weekend gap on a volatility-2.5 company landed at 6% of its pre-gap price
+ * under bear and 437% under bull -- the whole market's fate for the weekend
+ * decided by one coin flip the moment a student opened the dashboard on
+ * Monday. Rotating through regimes the way the 72 hours actually would have
+ * makes both tails collapse toward a normal-looking few days of trading.
+ *
+ * Everything at or after the live regime's start uses the real persisted
+ * regime; earlier stretches are invented by walking backwards with the same
+ * weighted pick and duration ranges a live rotation would have used. That
+ * history is synthetic either way -- nobody was watching -- so the goal is
+ * only that it be plausible and self-consistent.
+ *
+ * Build this ONCE per drift pass and share it across companies: the regime
+ * is market-wide, so two companies backfilling the same minute must agree on
+ * what the market was doing.
+ */
+export function buildRegimeTimeline(
+  fromMs: number,
+  nowMs: number,
+  current: RegimeStatus
+): RegimeSegment[] {
+  // The live regime covers from when it started through now (and beyond --
+  // Infinity means "any tick at or after this point", which also absorbs
+  // clock skew that puts a tick marginally past now).
+  const segments: RegimeSegment[] = [{ untilMs: Number.POSITIVE_INFINITY, regime: current.regime }];
+
+  let cursor = Math.min(current.startedAt.getTime(), nowMs);
+  let regime = current.regime;
+
+  for (let i = 0; cursor > fromMs && i < MAX_TIMELINE_SEGMENTS; i++) {
+    // pickNextRegime just means "a different regime, weighted" -- equally
+    // sensible run backwards as forwards.
+    const previous = pickNextRegime(regime);
+    segments.unshift({ untilMs: cursor, regime: previous });
+    cursor -= randomRegimeDurationMs(previous);
+    regime = previous;
+  }
+
+  return segments;
+}
+
 /**
  * Admin/teacher override -- forces the market straight into the given
  * regime right now, for however long they specify (or that regime's normal

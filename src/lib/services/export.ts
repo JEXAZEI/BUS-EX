@@ -57,9 +57,30 @@ export async function getTermExportRows(): Promise<ExportRow[]> {
   }));
 }
 
-function csvEscape(value: string | number): string {
+function csvQuote(value: string | number): string {
   const s = String(value);
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+/**
+ * Neutralises a cell that Excel/Sheets would otherwise evaluate as a formula.
+ *
+ * Validation already keeps commas, quotes and newlines out of every field, so
+ * the file's structure can't be broken -- but it does allow a leading `-`
+ * in a name (legitimately, for hyphenated names) and a leading `+`, `@` or
+ * `-` in a username or email. All four are formula lead-ins, so a student
+ * registering as "-Alice" or "@bob" turns the teacher's gradebook cell into
+ * a #NAME? error on open. `=` is already rejected everywhere, and none of
+ * `( ) | !` can get through either, so this is spreadsheet corruption rather
+ * than a code-execution route -- still worth not shipping.
+ *
+ * The standard mitigation: prefix a single quote, which spreadsheets strip on
+ * display and treat as "this cell is text". Applied only to the free-text
+ * columns; the numeric ones are produced by toFixed here, so guarding them
+ * would just turn a negative number into a string and break sorting.
+ */
+function csvGuardFormula(value: string): string {
+  return /^[=+\-@\t\r]/.test(value) ? csvQuote(`'${value}`) : csvQuote(value);
 }
 
 export function toCsv(rows: ExportRow[]): string {
@@ -68,17 +89,15 @@ export function toCsv(rows: ExportRow[]): string {
   rows.forEach((r, i) => {
     lines.push(
       [
-        i + 1,
-        r.fullName,
-        r.email,
-        r.username,
-        r.netWorth.toFixed(2),
-        r.cashBalance.toFixed(2),
-        r.holdingsValue.toFixed(2),
-        r.tradeCount,
-      ]
-        .map(csvEscape)
-        .join(",")
+        csvQuote(i + 1),
+        csvGuardFormula(r.fullName),
+        csvGuardFormula(r.email),
+        csvGuardFormula(r.username),
+        csvQuote(r.netWorth.toFixed(2)),
+        csvQuote(r.cashBalance.toFixed(2)),
+        csvQuote(r.holdingsValue.toFixed(2)),
+        csvQuote(r.tradeCount),
+      ].join(",")
     );
   });
   return lines.join("\r\n");
