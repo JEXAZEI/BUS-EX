@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Profile } from "@/lib/types";
+import type { Profile, UserRole } from "@/lib/types";
 
 // Words picked to be unambiguous when read aloud across a classroom -- no
 // homophones, no letters that sound alike, nothing that needs spelling out.
@@ -26,8 +26,16 @@ function suggestPassword(): string {
   return `${pick(SUGGEST_ADJECTIVES)}${pick(SUGGEST_NOUNS)}${digits}`;
 }
 
-export function UserRow({ user }: { user: Profile }) {
+export function UserRow({ user, viewerRole }: { user: Profile; viewerRole: UserRole }) {
   const router = useRouter();
+  const isOwner = viewerRole === "owner";
+  // Teachers handle the everyday case -- a student who forgot their password
+  // mid-period -- but never staff accounts: setting a password hash directly
+  // is taking over the account, so allowing it upward would let any teacher
+  // become the owner. Enforced server-side too (services/users.ts); this just
+  // keeps a button the teacher can't use from appearing at all.
+  const canResetPassword = isOwner || user.role === "student";
+  const canManageAccount = isOwner && user.role === "student";
   const [showReset, setShowReset] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -103,10 +111,12 @@ export function UserRow({ user }: { user: Profile }) {
           <p className="font-mono text-xs text-gray-400">${user.cash_balance.toFixed(2)} cash</p>
         </div>
         <div className="flex flex-wrap justify-end gap-2">
-          <button onClick={() => setShowReset((s) => !s)} className="btn-secondary" disabled={loading}>
-            Reset password
-          </button>
-          {user.role === "student" && (
+          {canResetPassword && (
+            <button onClick={() => setShowReset((s) => !s)} className="btn-secondary" disabled={loading}>
+              Reset password
+            </button>
+          )}
+          {canManageAccount && (
             <button onClick={toggleActive} className="btn-secondary" disabled={loading}>
               {user.is_active ? "Deactivate" : "Reactivate"}
             </button>
@@ -154,7 +164,7 @@ export function UserRow({ user }: { user: Profile }) {
         </div>
       )}
 
-      {user.role === "student" && (
+      {canManageAccount && (
         <div className="mt-3 border-t border-gray-100 dark:border-gray-700 pt-3">
           {!confirmDelete ? (
             <button onClick={() => setConfirmDelete(true)} className="text-xs text-red-600 hover:underline">

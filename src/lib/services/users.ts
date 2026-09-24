@@ -4,11 +4,15 @@ import { db } from "@/lib/db/client";
 import { sessions, users } from "@/lib/db/schema";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { passwordMatchesUsername } from "@/lib/validation";
+import type { UserRole } from "@/lib/types";
 
 export class ChangePasswordError extends Error {}
 
 /** Thrown when a new password is rejected by policy (see src/lib/validation.ts). */
 export class PasswordPolicyError extends Error {}
+
+/** Thrown when the caller's role doesn't permit acting on this target account. */
+export class ResetNotPermittedError extends Error {}
 
 /**
  * Resolves a login identifier, which may be either a username or an email.
@@ -33,20 +37,38 @@ export async function findUserByIdentifier(identifier: string) {
 }
 
 /**
- * Owner-initiated reset (e.g. a student forgot their password, or the
+ * Staff-initiated reset (e.g. a student forgot their password, or the
  * account looks compromised). Revokes every existing session for the
  * account -- a session is only ever checked against the password at login
  * time, not per-request, so without this an attacker holding a stolen
  * session would stay logged in for up to 30 days even after the password
  * changes underneath them.
+ *
+ * `actorRole` is the role of whoever is performing the reset. Teachers may
+ * reset students only; owners may reset anyone. That asymmetry is the whole
+ * security boundary here: setting a password hash directly is equivalent to
+ * taking over the account, so a teacher who could reset an owner (or another
+ * teacher) could promote themselves to owner at will. The check lives in
+ * this function rather than the route because the target's role comes from
+ * the row already read below -- no extra query, and no way for a future
+ * caller to route around it.
  */
-export async function resetUserPassword(userId: string, newPassword: string): Promise<void> {
+export async function resetUserPassword(
+  userId: string,
+  newPassword: string,
+  actorRole: UserRole
+): Promise<void> {
   // The route already ran passwordSchema (length + common-password denylist),
   // but the username check needs the *target* user's name, which only exists
   // here -- the route just has a userId. One extra read on a rare, admin-only
   // action.
   const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
   if (!user) throw new PasswordPolicyError("Account not found");
+
+  if (actorRole !== "owner" && user.role !== "student") {
+    throw new ResetNotPermittedError("Only the owner can reset a teacher or owner password.");
+  }
+
   if (passwordMatchesUsername(newPassword, user.username)) {
     throw new PasswordPolicyError("That password can't be the same as the username.");
   }

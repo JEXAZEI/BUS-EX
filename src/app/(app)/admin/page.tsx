@@ -52,12 +52,14 @@ export default async function AdminHomePage() {
           <p className="font-semibold">Students</p>
           <p className="text-sm text-gray-500">Look up any student&apos;s portfolio and trades.</p>
         </Link>
-        {profile.role === "owner" && (
-          <Link href="/admin/users" className="card hover:border-brand-300">
-            <p className="font-semibold">Users</p>
-            <p className="text-sm text-gray-500">Reset passwords, deactivate/delete accounts.</p>
-          </Link>
-        )}
+        <Link href="/admin/users" className="card hover:border-brand-300">
+          <p className="font-semibold">Users</p>
+          <p className="text-sm text-gray-500">
+            {profile.role === "owner"
+              ? "Reset passwords, deactivate/delete accounts."
+              : "Reset a student's password."}
+          </p>
+        </Link>
       </div>
 
       <div className="card">
