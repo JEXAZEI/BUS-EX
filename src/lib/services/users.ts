@@ -14,6 +14,9 @@ export class PasswordPolicyError extends Error {}
 /** Thrown when the caller's role doesn't permit acting on this target account. */
 export class ResetNotPermittedError extends Error {}
 
+/** Thrown when the caller's role doesn't permit renaming this target account. */
+export class RenameNotPermittedError extends Error {}
+
 /**
  * Resolves a login identifier, which may be either a username or an email.
  *
@@ -106,6 +109,51 @@ export async function changeOwnPassword(
   const passwordHash = await hashPassword(newPassword);
   await db.update(users).set({ passwordHash }).where(eq(users.id, userId));
   await db.delete(sessions).where(eq(sessions.userId, userId));
+}
+
+/**
+ * Everyone signs themselves up and types their own name, so typos are a
+ * certainty -- and a name is what the leaderboard, the recap and the
+ * teacher's CSV all identify a student by, so there has to be a way to fix
+ * one. Deliberately does NOT touch sessions or the password: this is
+ * correcting a display name, not a credential, and logging a whole class out
+ * because someone fixed a misspelling would be its own problem.
+ *
+ * Names are not unique (real people share them, and forcing uniqueness on a
+ * class roster would be wrong), so nothing is checked here beyond
+ * fullNameSchema in the route.
+ */
+async function writeFullName(userId: string, fullName: string): Promise<void> {
+  await db.update(users).set({ fullName }).where(eq(users.id, userId));
+}
+
+/** Self-service rename from the profile page -- the caller is the subject. */
+export async function changeOwnFullName(userId: string, fullName: string): Promise<void> {
+  await writeFullName(userId, fullName);
+}
+
+/**
+ * Staff rename from Admin -> Users, for the student who can't fix their own
+ * typo or asks the teacher to. Teachers may rename students only; owners may
+ * rename anyone -- the same boundary resetUserPassword draws, for a milder
+ * reason: a teacher renaming the owner can't take the account over, but
+ * there's no legitimate reason to and it's one less way to cause confusion.
+ * Checked here rather than in the route because the target's role comes from
+ * the row already being read.
+ */
+export async function renameUserAsStaff(
+  userId: string,
+  fullName: string,
+  actorRole: UserRole
+): Promise<void> {
+  const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  if (!user) throw new RenameNotPermittedError("Account not found");
+
+  if (actorRole !== "owner" && user.role !== "student") {
+    throw new RenameNotPermittedError("Only the owner can rename a teacher or owner account.");
+  }
+
+  await writeFullName(userId, fullName);
 }
 
 /**

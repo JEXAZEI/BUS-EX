@@ -36,7 +36,12 @@ export function UserRow({ user, viewerRole }: { user: Profile; viewerRole: UserR
   // keeps a button the teacher can't use from appearing at all.
   const canResetPassword = isOwner || user.role === "student";
   const canManageAccount = isOwner && user.role === "student";
+  // Same boundary as the password reset: a teacher handles students, the
+  // owner handles everyone. Enforced server-side in services/users.ts.
+  const canRename = isOwner || user.role === "student";
   const [showReset, setShowReset] = useState(false);
+  const [showRename, setShowRename] = useState(false);
+  const [fullName, setFullName] = useState(user.full_name);
   const [newPassword, setNewPassword] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -85,6 +90,20 @@ export function UserRow({ user, viewerRole }: { user: Profile; viewerRole: UserR
     }
   }
 
+  async function renameUser(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmed = fullName.trim();
+    if (trimmed === user.full_name) {
+      setShowRename(false);
+      return;
+    }
+    const ok = await call("/api/admin/users/rename", { userId: user.id, fullName: trimmed });
+    if (ok) {
+      setMessage("Name updated");
+      setShowRename(false);
+    }
+  }
+
   async function toggleActive() {
     await call("/api/admin/users/deactivate", { userId: user.id, active: !user.is_active });
   }
@@ -111,6 +130,11 @@ export function UserRow({ user, viewerRole }: { user: Profile; viewerRole: UserR
           <p className="font-mono text-xs text-gray-400">${user.cash_balance.toFixed(2)} cash</p>
         </div>
         <div className="flex flex-wrap justify-end gap-2">
+          {canRename && (
+            <button onClick={() => setShowRename((s) => !s)} className="btn-secondary" disabled={loading}>
+              Edit name
+            </button>
+          )}
           {canResetPassword && (
             <button onClick={() => setShowReset((s) => !s)} className="btn-secondary" disabled={loading}>
               Reset password
@@ -123,6 +147,41 @@ export function UserRow({ user, viewerRole }: { user: Profile; viewerRole: UserR
           )}
         </div>
       </div>
+
+      {showRename && (
+        <div className="mt-3 border-t border-gray-100 dark:border-gray-700 pt-3">
+          <form onSubmit={renameUser} className="flex items-end gap-2">
+            <div className="flex-1">
+              <label className="label">Full name</label>
+              <input
+                className="input"
+                type="text"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                minLength={2}
+                maxLength={80}
+                required
+              />
+            </div>
+            <button type="submit" className="btn-primary" disabled={loading}>
+              Save
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setFullName(user.full_name);
+                setShowRename(false);
+                setError(null);
+              }}
+              className="btn-secondary"
+              disabled={loading}
+            >
+              Cancel
+            </button>
+          </form>
+          {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+        </div>
+      )}
 
       {showReset && (
         <div className="mt-3 border-t border-gray-100 dark:border-gray-700 pt-3">
@@ -189,10 +248,12 @@ export function UserRow({ user, viewerRole }: { user: Profile; viewerRole: UserR
         </div>
       )}
 
-      {/* `error` is shared by every action on this card, but the reset form
-          renders its own copy inline, so skip this one while that form is
-          open or the same message would appear twice. */}
-      {error && !showReset && <p className="mt-2 text-sm text-red-600">{error}</p>}
+      {/* `error` is shared by every action on this card, but the reset and
+          rename forms render their own copy inline, so skip this one while
+          either is open or the same message would appear twice. */}
+      {error && !showReset && !showRename && (
+        <p className="mt-2 text-sm text-red-600">{error}</p>
+      )}
       {message && <p className="mt-2 text-sm delta-up">{message}</p>}
     </div>
   );

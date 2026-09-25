@@ -132,6 +132,15 @@ export const loginSchema = z.object({
   password: z.string().min(1, "Password is required").max(200),
 });
 
+/** Self-service rename from the profile page. */
+export const updateOwnNameSchema = z.object({ fullName: fullNameSchema });
+
+/** Teacher/owner rename from Admin -> Users. */
+export const adminRenameSchema = z.object({
+  userId: z.string().uuid(),
+  fullName: fullNameSchema,
+});
+
 export const tradeSchema = z.object({
   companyId: z.string().uuid(),
   side: z.enum(["buy", "sell"]),

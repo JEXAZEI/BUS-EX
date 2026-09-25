@@ -6,6 +6,7 @@ import { getCurrentProfile } from "@/lib/session";
 import { snapshotNetWorth } from "@/lib/services/profile";
 import { PriceChart } from "@/components/PriceChart";
 import { ChangePasswordForm } from "@/components/ChangePasswordForm";
+import { EditNameForm } from "@/components/EditNameForm";
 import { DiversificationMeter } from "@/components/DiversificationMeter";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { companyPrice, type Company } from "@/lib/types";
@@ -161,6 +162,13 @@ export default async function ProfilePage() {
             ))}
           </ul>
         )}
+      </div>
+
+      <div className="card">
+        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-500">
+          Your name
+        </h2>
+        <EditNameForm currentName={profile.full_name} />
       </div>
 
       <div className="card">
