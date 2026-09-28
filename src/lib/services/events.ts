@@ -108,10 +108,30 @@ export async function runMarketEvent(
       );
       template = res.rows[0];
     } else {
+      // Weighted pick: each template draws an exponential variate with rate
+      // `weight` and the smallest wins, which selects it with probability
+      // exactly weight / total. The previous `order by random() * weight
+      // desc` looked equivalent but isn't -- the max of scaled uniforms is
+      // dominated by the heaviest entries. With the seed weights, a weight-1
+      // template (scandal, relist, tax) only won when its draw beat every
+      // weight-2 and weight-3 draw, which simulated at ~0.0% of events
+      // instead of ~5% each; price shocks took 81% instead of 53%.
+      //
+      // Templates that can't apply right now are skipped rather than drawn
+      // and then failed: a relist with nothing delisted would otherwise throw
+      // "No eligible company" at the teacher (or the cron) about one pick in
+      // twenty, which the old skew had been hiding by never picking relist.
       const res = await client.query<TemplateRow>(
         `select id, event_type, title_template, description_template,
                 min_impact_pct, max_impact_pct, min_cash, max_cash
-         from event_templates where is_active order by random() * weight desc limit 1`
+         from event_templates t
+         where is_active
+           and (t.event_type <> 'relist'
+                or exists (select 1 from companies where is_delisted))
+           and (t.event_type not in ('price_shock', 'sector_move', 'scandal_delist')
+                or exists (select 1 from companies where not is_delisted))
+         order by -ln(1 - random()) / weight
+         limit 1`
       );
       template = res.rows[0];
     }

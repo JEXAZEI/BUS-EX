@@ -82,18 +82,22 @@ export default async function ProfilePage() {
         </p>
       </div>
 
+      {/* Tighter padding and type below sm: at 375px each card has ~60px for
+          the figure, and a five-digit balance ("$12345.67") ran past the card
+          edge -- a teacher setting $10,000 starting cash put every student
+          there on day one. break-all is the backstop for anything larger. */}
       <div className="grid grid-cols-3 gap-2">
-        <div className="card text-center">
+        <div className="card !px-2 text-center sm:!px-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Cash</p>
-          <p className="mono-nums text-lg font-bold tabular-nums">${profile.cash_balance.toFixed(2)}</p>
+          <p className="mono-nums break-all text-sm font-bold tabular-nums sm:text-lg">${profile.cash_balance.toFixed(2)}</p>
         </div>
-        <div className="card text-center">
+        <div className="card !px-2 text-center sm:!px-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Holdings</p>
-          <p className="mono-nums text-lg font-bold tabular-nums">${holdingsValue.toFixed(2)}</p>
+          <p className="mono-nums break-all text-sm font-bold tabular-nums sm:text-lg">${holdingsValue.toFixed(2)}</p>
         </div>
-        <div className="card text-center">
+        <div className="card !px-2 text-center sm:!px-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Net worth</p>
-          <p className="mono-nums text-lg font-bold tabular-nums">${netWorth.toFixed(2)}</p>
+          <p className="mono-nums break-all text-sm font-bold tabular-nums sm:text-lg">${netWorth.toFixed(2)}</p>
         </div>
       </div>
 

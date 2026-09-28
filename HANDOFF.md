@@ -1,7 +1,7 @@
 # BUS-EX — Project Handoff
 
 **Repo:** `github.com/JEXAZEI/BUS-EX`
-**Working branch:** `claude/jex-classroom-stock-exchange-y23a47`
+**Working branch:** `claude/jex-classroom-stock-exchange-y23a47` (the pre-live bug-hunt pass in §5b was pushed to `claude/charming-clarke-8k6snc`, which contains everything on this branch plus that pass)
 **HEAD at time of writing:** `c9b577f` — *Add name editing for students and staff*
 **Last updated:** 2026-09-28
 
@@ -225,6 +225,22 @@ Three design calls worth preserving:
 
 ---
 
+## 5b. Pre-live bug-hunt pass (after `c9b577f`)
+
+Found by running the app (local Postgres + production build + Playwright), not by reading:
+
+1. **Selling a whole position could 500.** Share quantities beyond 4 decimals were applied to the pool unrounded but stored rounded in `holdings`, so pool + holdings drifted past `total_shares` and the sell tripped `pool_shares_le_total`. `executeTrade` now quantizes to 4 dp first.
+2. **Random events were badly skewed.** `order by random() * weight` is not weight-proportional: scandal, relist and tax each fired ~0% instead of ~5%, price shocks 81% instead of 53%. Now an exponential-variate pick, and templates that can't apply (relist with nothing delisted) are skipped instead of throwing.
+3. **Recap "most active trader" grouped by name**, merging two students who share one. Now grouped by account.
+4. **Password == email was only blocked at signup** (despite §6 saying otherwise); change-password and staff reset now use `passwordMatchesAccount`.
+5. **Change-password's 5/15-min limit was spent by validation rejections** (denylist hits), locking students out with no wrong guess. Now checked after validation, like the name route.
+6. **Malformed ids in `/company/[id]` and `/admin/students/[id]` were 500s**; now 404s via `isUuid`.
+7. **`getCompanyQuotes` pulled the entire 25h price history (~10k rows, ~1.2 MB) on every render and 20s poll** just to find 20 baselines -- on the order of 200 MB/min of Neon egress for a class of 30. Now a lateral one-row-per-company index lookup (identical results, 20 rows).
+8. **Company creation with an extreme cash/shares ratio 500'd and left a company with no price history.** Starting price is now bounded ($0.01-$1,000,000) and creation is one transaction.
+9. **Profile / student-detail money cards clipped five-digit balances on phones.**
+
+Also verified: 30 concurrent students (signup + 360 mixed trades/page loads + events) with zero 5xx and exact share conservation; reset flow end to end; 3-day drift backfill (0.56 s, prices 67-139% of start). README's stale drift/regime/roles facts were corrected.
+
 ## 6. Security model as it stands
 
 - **Passwords:** bcryptjs, 12 rounds. Min 8 / max 72 chars, plus a
@@ -366,9 +382,6 @@ placeholder `DATABASE_URL` → `npx next lint`.
   buy to inflate a stock, the main account sells into it. Pre-existing — usernames
   alone already allowed it — and the real defence is that staff see the whole roster.
   Blocking `+` addressing would be a product decision.
-- **`README.md` has drifted from the code.** It still describes hourly drift ticks
-  (now 3 min), "10–14 hour" regimes (now bull 14–20h / neutral 8–12h / bear 5–9h),
-  and a leaderboard showing usernames (now full names). Worth a pass; not done yet.
 
 ### Not verified at all
 Anything about live production behaviour. Also: no automated test suite exists, so

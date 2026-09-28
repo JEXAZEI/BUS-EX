@@ -21,11 +21,14 @@ export async function getTermRecap(): Promise<TermRecap> {
     .slice(0, 3)
     .map((e) => ({ name: e.fullName, netWorth: e.netWorth }));
 
+  // Grouped by account, not by name: names aren't unique (real people share
+  // them), and grouping on full_name summed two different "Sam Lee"s into one
+  // phantom trader who could out-rank the real most active student.
   const mostActiveResult = await db.execute<{ full_name: string; trade_count: string }>(sql`
     select u.full_name, count(*) as trade_count
     from trades t
     join users u on u.id = t.user_id
-    group by u.full_name
+    group by u.id, u.full_name
     order by trade_count desc
     limit 1
   `);

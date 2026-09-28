@@ -29,14 +29,14 @@ does the reverse. This means:
 - Prices move automatically from trading activity, with no admin needed to set them.
 - A company's own treasury is never directly drained or inflated by trades — only the pool is.
 - Every trade is computed **inside a single Postgres transaction with row locks** (`executeTrade` in `src/lib/services/trades.ts`), server-side, from the live pool state — the client never sends a price, only a share quantity.
-- On top of trades and admin-triggered events, quiet companies also get a small random price nudge (at most once per hour) whenever someone loads the dashboard or a company page (`applyAmbientDrift` in `src/lib/services/drift.ts`) — there's no dedicated background worker, so the market only actually advances when someone's logged in and looking at it. To compensate, a company that's fallen behind (nobody's checked on it in a while) gets **backfilled** with one tick per missed hour, each with its own historical timestamp, instead of a single tick dated "now" -- capped at 3 days' worth so a long idle stretch doesn't do unbounded work. That's what keeps the price chart's time axis meaningful (real intermediate points, not one big flat gap) and makes the market feel like it kept running over a weekend or overnight, even though the computation only happens the next time someone visits.
-- That nudge isn't pure mean-zero noise: the whole market rotates through **bull / bear / neutral regimes** that each last roughly 10–14 hours (`src/lib/services/regime.ts`), skewing the drift range up during a bull run, down during a bear run, and symmetric when neutral. That's tuned for a **multi-day (~5 day) class term**: about 8-10 regime changes over the term, each a multi-hour stretch, instead of the mood flipping every few minutes. The hourly tick interval keeps a single rally from compounding into something absurd (a 5-minute tick over a 12-hour regime would let a bull run compound 100+ times). The current regime is deliberately **not shown anywhere in the UI** — real markets don't announce their own trend, and revealing it would hand students a free signal instead of having them read the price action themselves.
+- On top of trades and admin-triggered events, quiet companies also get a small random price nudge (at most once every 3 minutes) whenever someone loads the dashboard or a company page (`applyAmbientDrift` in `src/lib/services/drift.ts`) — there's no dedicated background worker, so the market only actually advances when someone's logged in and looking at it. To compensate, a company that's fallen behind (nobody's checked on it in a while) gets **backfilled** with one tick per missed 3-minute interval, each with its own historical timestamp, instead of a single tick dated "now" -- capped at 3 days' worth so a long idle stretch doesn't do unbounded work. That's what keeps the price chart's time axis meaningful (real intermediate points, not one big flat gap) and makes the market feel like it kept running over a weekend or overnight, even though the computation only happens the next time someone visits.
+- That nudge isn't pure mean-zero noise: the whole market rotates through **bull / bear / neutral regimes** (`src/lib/services/regime.ts`) -- bull runs last 14–20 hours, neutral 8–12, bear 5–9 -- skewing the drift up during a bull run, down during a bear run, and symmetric when neutral. Bull is also picked most often, so the term leans upward overall while bear stretches are sharper but shorter. That's tuned for a **multi-day (~5 day) class term**: about 8-10 regime changes over the term, each a multi-hour stretch, instead of the mood flipping every few minutes. The per-tick bias is scaled to the 3-minute interval, so a regime's hourly trend is the same as it would be with coarser ticks -- the chart just has more real points to draw. Teachers can see the current regime (and override it) on **Admin**. The current regime is deliberately **not shown anywhere in the UI** — real markets don't announce their own trend, and revealing it would hand students a free signal instead of having them read the price action themselves.
 - Each company also has its own **volatility** multiplier (`companies.volatility`, editable anytime in **Admin → Companies**) that scales its drift range under whatever the market-wide regime is doing — a "blue chip" set to 0.5 barely moves, a hype stock set to 2.5 swings hard, both under the same bull/bear cycle. The 20 seeded companies already have distinct values matching their personalities (see `db/seed.sql`).
 
 **Leaderboard.** `/leaderboard` ranks every active student by net worth
 (cash + holdings at spot price), computed fresh on every page load
 (`getLeaderboard` in `src/lib/services/leaderboard.ts`). It only shows
-usernames and total net worth, never which companies someone holds or
+names and total net worth, never which companies someone holds or
 their trade history -- that stays private on their own profile page.
 Teacher/owner accounts are excluded since they can't trade.
 
@@ -176,8 +176,8 @@ works regardless, so scheduled events are a nice-to-have, not a requirement.
   caller's identity and role from their session cookie
   (`getCurrentProfile()` / `getSessionUser()`) and checks it before doing
   anything sensitive; there's no client-trusted "am I an admin" flag. Owner-
-  only actions (password reset, account deletion) are checked in their own
-  route in addition to being a distinct role from teacher (see below), so
+  only actions (deactivating/deleting accounts, resetting a teacher's or
+  owner's password) are checked in their own route or service in addition to being a distinct role from teacher (see below), so
   permissions can't be spoofed by editing a request body.
 - **Data access is scoped per-user in application code** — every query that
   returns account-specific data (holdings, trades, cash balance, net-worth
@@ -195,7 +195,8 @@ works regardless, so scheduled events are a nice-to-have, not a requirement.
   alone can't be used to forge a session.
 - **Login rate limiting** — `src/lib/rateLimit.ts` tracks failed login
   attempts per (username, IP) pair in a `login_attempts` table and locks
-  out further attempts for 15 minutes after 5 failures, mitigating
+  out further attempts for 15 minutes after 5 failures, plus a looser
+  per-IP ceiling (200 failures / 15 minutes) across all accounts, mitigating
   brute-force password guessing.
 - **Input validation & sanitization** — every API route validates its input
   with `zod` schemas (`src/lib/validation.ts`) before touching the database:
@@ -228,8 +229,8 @@ Handlers under `/api`), so exposure is low, but you should periodically run
 | Role | Companies | Events | Game settings | Reset game | User accounts |
 |---|---|---|---|---|---|
 | Student | trade only | view only | — | — | own account only |
-| Teacher | add/edit/delist | trigger | adjust starting cash | yes | — |
-| Owner | add/edit/delist | trigger | adjust starting cash | yes | reset passwords, deactivate/delete accounts |
+| Teacher | add/edit/delist | trigger | adjust starting cash | yes | reset student passwords, fix student names |
+| Owner | add/edit/delist/delete | trigger | adjust starting cash | yes | reset any password, fix any name, deactivate/delete accounts |
 
 The public `/signup` form always creates a student account. Teacher/owner
 accounts are pre-created directly with a SQL insert (see "Pre-creating admin
@@ -265,7 +266,7 @@ changes required.
 
 Event templates live in the `event_templates` table and are picked at
 random (weighted) whenever an event fires — either manually from **Admin →
-Market events** or via the optional hourly cron job. Add a new row to
+Market events** or via the optional daily cron job. Add a new row to
 `event_templates` (via the Neon SQL editor or table view) to expand the
 pool; `{company}`, `{sector}`, `{pct}`, and `{amount}` in the
 title/description templates get substituted automatically. See

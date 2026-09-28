@@ -17,13 +17,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  if (!(await checkAndRecordRateLimit(profile.id, "change-password", 15 * 60, 5))) {
-    return NextResponse.json(
-      { error: "Too many attempts. Try again in a few minutes." },
-      { status: 429 }
-    );
-  }
-
   let body: unknown;
   try {
     body = await request.json();
@@ -36,6 +29,19 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: parsed.error.issues[0]?.message ?? "Invalid input" },
       { status: 400 }
+    );
+  }
+
+  // Deliberately after validation, like the name route. The limit exists to
+  // stop someone guessing the current password on an unattended laptop, and
+  // only requests that reach that check are guesses. Checking first meant a
+  // student whose new password kept hitting the denylist ("student123",
+  // "changeme") burned the whole budget on rejections and was locked out of
+  // changing their password for 15 minutes without a single wrong guess.
+  if (!(await checkAndRecordRateLimit(profile.id, "change-password", 15 * 60, 5))) {
+    return NextResponse.json(
+      { error: "Too many attempts. Try again in a few minutes." },
+      { status: 429 }
     );
   }
 

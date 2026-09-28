@@ -2,12 +2,14 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/session";
 import { getStudentDetail } from "@/lib/services/students";
+import { isUuid } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminStudentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   await requireAdmin();
   const { id } = await params;
+  if (!isUuid(id)) notFound();
   const student = await getStudentDetail(id);
   if (!student) notFound();
 
@@ -32,18 +34,19 @@ export default async function AdminStudentDetailPage({ params }: { params: Promi
         </p>
       </div>
 
+      {/* Same sizing as the profile page's cards -- see the note there. */}
       <div className="grid grid-cols-3 gap-2">
-        <div className="card text-center">
+        <div className="card !px-2 text-center sm:!px-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Cash</p>
-          <p className="mono-nums text-lg font-bold tabular-nums">${student.cashBalance.toFixed(2)}</p>
+          <p className="mono-nums break-all text-sm font-bold tabular-nums sm:text-lg">${student.cashBalance.toFixed(2)}</p>
         </div>
-        <div className="card text-center">
+        <div className="card !px-2 text-center sm:!px-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Holdings</p>
-          <p className="mono-nums text-lg font-bold tabular-nums">${holdingsValue.toFixed(2)}</p>
+          <p className="mono-nums break-all text-sm font-bold tabular-nums sm:text-lg">${holdingsValue.toFixed(2)}</p>
         </div>
-        <div className="card text-center">
+        <div className="card !px-2 text-center sm:!px-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Net worth</p>
-          <p className="mono-nums text-lg font-bold tabular-nums">${student.netWorth.toFixed(2)}</p>
+          <p className="mono-nums break-all text-sm font-bold tabular-nums sm:text-lg">${student.netWorth.toFixed(2)}</p>
         </div>
       </div>
 

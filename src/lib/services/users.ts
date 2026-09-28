@@ -3,7 +3,7 @@ import { eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { sessions, users } from "@/lib/db/schema";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
-import { passwordMatchesUsername } from "@/lib/validation";
+import { passwordMatchesAccount } from "@/lib/validation";
 import type { UserRole } from "@/lib/types";
 
 export class ChangePasswordError extends Error {}
@@ -62,8 +62,8 @@ export async function resetUserPassword(
   actorRole: UserRole
 ): Promise<void> {
   // The route already ran passwordSchema (length + common-password denylist),
-  // but the username check needs the *target* user's name, which only exists
-  // here -- the route just has a userId. One extra read on a rare, admin-only
+  // but the username/email check needs the *target* user's identifiers, which
+  // only exist here -- the route just has a userId. One extra read on a rare, admin-only
   // action.
   const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
   if (!user) throw new PasswordPolicyError("Account not found");
@@ -72,8 +72,8 @@ export async function resetUserPassword(
     throw new ResetNotPermittedError("Only the owner can reset a teacher or owner password.");
   }
 
-  if (passwordMatchesUsername(newPassword, user.username)) {
-    throw new PasswordPolicyError("That password can't be the same as the username.");
+  if (passwordMatchesAccount(newPassword, user)) {
+    throw new PasswordPolicyError("That password can't be the same as the username or email.");
   }
 
   const passwordHash = await hashPassword(newPassword);
@@ -99,11 +99,11 @@ export async function changeOwnPassword(
   const currentOk = await verifyPassword(currentPassword, user.passwordHash);
   if (!currentOk) throw new ChangePasswordError("Current password is incorrect");
 
-  // Username check lives here rather than in the route's zod schema because
-  // the request body only carries the passwords -- the username comes from
+  // Username/email check lives here rather than in the route's zod schema
+  // because the request body only carries the passwords -- both come from
   // the user row already fetched above, so this costs nothing extra.
-  if (passwordMatchesUsername(newPassword, user.username)) {
-    throw new ChangePasswordError("Your password can't be the same as your username.");
+  if (passwordMatchesAccount(newPassword, user)) {
+    throw new ChangePasswordError("Your password can't be the same as your username or email.");
   }
 
   const passwordHash = await hashPassword(newPassword);

@@ -66,6 +66,24 @@ export function passwordMatchesUsername(password: string, username: string): boo
   return localPart.length >= 4 && pw === localPart;
 }
 
+/**
+ * Both login identifiers, checked together. Every password-setting path must
+ * use this rather than passwordMatchesUsername alone: signup checked the
+ * email, but self-service change and staff reset only checked the username,
+ * so "password == my email" -- exactly as guessable, since both are typed at
+ * the same login box -- was refused at signup and accepted a minute later on
+ * the profile page.
+ */
+export function passwordMatchesAccount(
+  password: string,
+  account: { username: string; email: string }
+): boolean {
+  return (
+    passwordMatchesUsername(password, account.username) ||
+    passwordMatchesUsername(password, account.email)
+  );
+}
+
 // Real names, so deliberately permissive about punctuation -- apostrophes
 // ("O'Brien"), hyphens ("Mary-Jane"), periods ("Jr."), and accented letters
 // are all legitimate. The \p{L} unicode class covers non-English alphabets
@@ -115,10 +133,7 @@ export const signupSchema = z
     // Checked against the email too, not just the username -- now that an
     // account has two login identifiers, "password == my email" is exactly
     // as guessable as "password == my username" was.
-    if (
-      passwordMatchesUsername(data.password, data.username) ||
-      passwordMatchesUsername(data.password, data.email)
-    ) {
+    if (passwordMatchesAccount(data.password, data)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["password"],
@@ -167,4 +182,38 @@ export const companyUpsertSchema = z.object({
   startingPoolCash: z.number().positive().max(100_000_000),
   startingPoolShares: z.number().positive().max(100_000_000),
   volatility: z.number().positive().max(10).default(1),
+}).superRefine((c, ctx) => {
+  // Pool size is locked after creation (the form disables it), so this only
+  // guards new companies. Each bound was individually fine, but their ratio
+  // wasn't checked: 1 / 100,000,000 is a starting price that rounds to $0 in
+  // price_history (a check-constraint violation), 100,000,000 / 0.0001
+  // overflows it, and shares under 0.0001 round to zero in the pool. Each of
+  // those was a 500 -- and the first two left a company saved with no price
+  // history behind them.
+  if (c.id !== null) return;
+  if (c.startingPoolShares < 1) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["startingPoolShares"],
+      message: "Starting pool shares must be at least 1",
+    });
+    return;
+  }
+  const price = c.startingPoolCash / c.startingPoolShares;
+  if (price < 0.01 || price > 1_000_000) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["startingPoolCash"],
+      message: "Starting price (pool cash ÷ pool shares) must be between $0.01 and $1,000,000",
+    });
+  }
 });
+
+/**
+ * For ids taken from a URL segment. Postgres rejects a malformed uuid with an
+ * error rather than matching nothing, so a mistyped or truncated link (e.g.
+ * /company/abc) became a 500 instead of the 404 a missing id already gets.
+ */
+export function isUuid(value: string): boolean {
+  return z.string().uuid().safeParse(value).success;
+}

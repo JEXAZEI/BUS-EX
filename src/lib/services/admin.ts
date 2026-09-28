@@ -25,30 +25,34 @@ export async function adminUpsertCompany(input: CompanyUpsertInput): Promise<str
   }
 
   if (!input.id) {
-    const [created] = await db
-      .insert(companies)
-      .values({
-        name: input.name,
-        ticker: input.ticker,
-        description: input.description,
-        sector: input.sector,
-        poolCash: String(input.startingPoolCash),
-        poolShares: String(input.startingPoolShares),
-        totalShares: String(input.startingPoolShares),
-        startingPoolCash: String(input.startingPoolCash),
-        startingPoolShares: String(input.startingPoolShares),
-        volatility: String(input.volatility),
-      })
-      .returning({ id: companies.id });
+    // One transaction, so a company can never exist without its opening price
+    // point -- the chart, the 24h change and drift all assume one is there.
+    return db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(companies)
+        .values({
+          name: input.name,
+          ticker: input.ticker,
+          description: input.description,
+          sector: input.sector,
+          poolCash: String(input.startingPoolCash),
+          poolShares: String(input.startingPoolShares),
+          totalShares: String(input.startingPoolShares),
+          startingPoolCash: String(input.startingPoolCash),
+          startingPoolShares: String(input.startingPoolShares),
+          volatility: String(input.volatility),
+        })
+        .returning({ id: companies.id });
 
-    if (!created) throw new AdminError("Failed to create company");
+      if (!created) throw new AdminError("Failed to create company");
 
-    await db.insert(priceHistory).values({
-      companyId: created.id,
-      price: String(input.startingPoolCash / input.startingPoolShares),
+      await tx.insert(priceHistory).values({
+        companyId: created.id,
+        price: String(input.startingPoolCash / input.startingPoolShares),
+      });
+
+      return created.id;
     });
-
-    return created.id;
   }
 
   const [updated] = await db

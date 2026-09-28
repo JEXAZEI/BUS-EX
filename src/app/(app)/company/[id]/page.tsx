@@ -14,11 +14,13 @@ import { AutoRefresh } from "@/components/AutoRefresh";
 import { CompanyAvatar } from "@/components/CompanyAvatar";
 import { RelatedCompanies } from "@/components/RelatedCompanies";
 import { companyPrice } from "@/lib/types";
+import { isUuid } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
 
 export default async function CompanyPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  if (!isUuid(id)) notFound();
   const profile = await getCurrentProfile();
   if (!profile) notFound();
 

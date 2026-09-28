@@ -19,6 +19,12 @@ function round(n: number, decimals: number): number {
   return Math.round(n * f) / f;
 }
 
+/** Scale of every share column in db/schema.sql (numeric(18, 4)). */
+const SHARE_DECIMALS = 4;
+
+/** Cash rounds to the cent, so a sliver of a share can come to $0.00. */
+const TOO_SMALL = "That order is worth less than a cent. Try more shares.";
+
 /**
  * The single place shares/cash can move for a normal trade. Recomputes the
  * price from the live constant-product pool inside a locked transaction --
@@ -29,10 +35,19 @@ export async function executeTrade(
   userId: string,
   companyId: string,
   side: TradeSide,
-  shares: number
+  requestedShares: number
 ): Promise<TradeResult> {
+  // Every share column is numeric(18, 4), so Postgres silently rounds any
+  // finer quantity -- but the pool math below ran on the unrounded float.
+  // Buying 0.12345 shares moved 0.12345 out of the pool and credited 0.1235
+  // to the holding, conjuring 0.00005 of a share. Enough of that pushed
+  // pool + holdings past total_shares, and then selling the whole position
+  // back tripped the pool_shares <= total_shares constraint: a 500, with the
+  // student unable to sell. Quantizing up front keeps the pool, the holding
+  // and the trade log agreeing to the last digit.
+  const shares = round(requestedShares, SHARE_DECIMALS);
   if (!shares || shares <= 0) {
-    throw new TradeError("Share quantity must be positive");
+    throw new TradeError("Share quantity must be at least 0.0001");
   }
 
   return withTransaction(async (client) => {
@@ -70,13 +85,13 @@ export async function executeTrade(
     let cashAmount: number;
 
     if (side === "buy") {
-      newPoolShares = poolShares - shares;
+      newPoolShares = round(poolShares - shares, SHARE_DECIMALS);
       if (newPoolShares <= 0) {
         throw new TradeError("Not enough shares available in the market for that order");
       }
       newPoolCash = k / newPoolShares;
       cashAmount = round(newPoolCash - poolCash, 2);
-      if (cashAmount <= 0) throw new TradeError("Invalid trade");
+      if (cashAmount <= 0) throw new TradeError(TOO_SMALL);
       if (cashAmount > userCash) {
         throw new TradeError("Insufficient cash balance for this purchase");
       }
@@ -100,12 +115,11 @@ export async function executeTrade(
         throw new TradeError("You do not own enough shares to sell that amount");
       }
 
-      newPoolShares = poolShares + shares;
+      newPoolShares = round(poolShares + shares, SHARE_DECIMALS);
       newPoolCash = k / newPoolShares;
       cashAmount = round(poolCash - newPoolCash, 2);
-      if (cashAmount <= 0 || cashAmount >= poolCash) {
-        throw new TradeError("Invalid trade");
-      }
+      if (cashAmount <= 0) throw new TradeError(TOO_SMALL);
+      if (cashAmount >= poolCash) throw new TradeError("Invalid trade");
 
       await client.query(`update users set cash_balance = cash_balance + $1 where id = $2`, [
         cashAmount,
