@@ -29,6 +29,7 @@ does the reverse. This means:
 - Prices move automatically from trading activity, with no admin needed to set them.
 - A company's own treasury is never directly drained or inflated by trades — only the pool is.
 - Every trade is computed **inside a single Postgres transaction with row locks** (`executeTrade` in `src/lib/services/trades.ts`), server-side, from the live pool state — the client never sends a price, only a share quantity.
+- Share quantities are **quantized to 4 decimal places before any pool math**, matching the `numeric(18,4)` columns they're stored in. Doing the math on the unrounded value instead meant a buy of `0.12345` shares took `0.12345` out of the pool while the holding stored `0.1235`; the discrepancy accumulated until `pool_shares + holdings` passed `total_shares`, and selling the position back tripped the `pool_shares_le_total` constraint with a 500. **The invariant to preserve: pool and holdings must be in the same precision as the columns.**
 - On top of trades and admin-triggered events, quiet companies also get a small random price nudge **every 3 minutes** whenever someone loads the dashboard or a company page (`applyAmbientDrift` in `src/lib/services/drift.ts`) — there's no dedicated background worker, so the market only actually advances when someone's logged in and looking at it. To compensate, a company that's fallen behind (nobody's checked on it in a while) gets **backfilled** with one tick per missed 3-minute interval, each with its own historical timestamp, instead of a single tick dated "now" -- capped at `MAX_CATCHUP_TICKS` (1440 ticks = 3 days) so a long idle stretch doesn't do unbounded work. That's what keeps the price chart's time axis meaningful (real intermediate points, not one big flat gap) and makes the market feel like it kept running over a weekend or overnight, even though the computation only happens the next time someone visits. A 3-minute interval is what gives the **1H** chart range ~20 real points to draw; at 15 minutes it had 4, and four points interpolated into a lazy curve read as nothing like a stock chart.
 - The whole catch-up is written in **two queries** (one `UPDATE`, one batched multi-row `INSERT`), not two per tick. Doing it per tick meant a multi-day catch-up made thousands of sequential round trips in a single page load, which over Neon's real latency from a Vercel function blew past the serverless timeout and killed the response mid-stream — the browser reported a corrupted stream and the dashboard rendered blank. Keep it batched.
 - That nudge isn't pure mean-zero noise: the whole market rotates through **bull / bear / neutral regimes** (`src/lib/services/regime.ts`), skewing drift up during a bull run, down during a bear run, and symmetric when neutral. Each regime has its own duration range — **bull 14–20h, neutral 8–12h, bear 5–9h** — and its own selection weight (bull 0.45, neutral 0.35, bear 0.2). Both asymmetries point the same way on purpose: bull runs are picked more often *and* last longer, while bear runs are sharper but shorter ("elevator down, stairs up"), so a reasonably engaged student is likely to come out ahead over a 5-day term rather than facing a coin flip. That works out to roughly ten regime stretches across the term instead of the mood flipping every few minutes.
@@ -269,6 +270,12 @@ works regardless, so scheduled events are a nice-to-have, not a requirement.
   - Signup is limited per IP but set deliberately high (200 per 10 minutes)
     because **a whole class shares one school IP**. Any per-IP limit here has
     to clear ~30 students signing up within a few minutes of each other.
+  - On paths where a *rejected* attempt shouldn't cost the user anything
+    (changing a password, renaming yourself), the limit is checked **after**
+    validation, not before. Checking first meant five denylist rejections
+    ("student123") locked a student out without a single wrong guess. Wrong
+    *current-password* guesses still count, since those are what the limit
+    exists to slow down.
   - The client IP is resolved from `x-vercel-forwarded-for`, then `x-real-ip`,
     then the **last** hop of `X-Forwarded-For` (`getClientIp`). Reading the
     *first* hop — as this used to — hands the client control of its own
@@ -281,7 +288,11 @@ works regardless, so scheduled events are a nice-to-have, not a requirement.
   a denylist of obviously-guessable passwords (`COMMON_PASSWORDS` in
   `src/lib/validation.ts`, including classroom-flavoured guesses like
   `student123` and `teacher1`), and a rule rejecting a password that is just
-  the account's own username or email. It's deliberately a denylist rather
+  the account's own username *or* email — `passwordMatchesAccount`, which all
+  three paths share precisely so they can't drift apart again (signup once
+  checked both while change and reset checked only the username, so
+  "password == my email" was refused at signup and accepted a minute later on
+  the profile page). It's deliberately a denylist rather
   than a complexity rule — "must contain a symbol" mostly produces forgotten
   passwords, and a reset mid-period costs a student real trading time. Because
   that also rules out the passwords a teacher would naturally invent, the
@@ -388,8 +399,14 @@ accounts from **Admin → Users** (Owner only) or re-run `db/schema.sql` +
 **Admin → Companies** lets teachers/owners create new companies (name,
 ticker, sector, description, starting AMM pool size, and volatility --
 pool size is locked after creation since changing it retroactively would
-distort existing trades, but volatility can be tuned anytime) and
-delist/relist existing ones. Twenty placeholder companies across 7 sectors
+distort existing trades, but volatility can be tuned anytime). The implied
+opening price (`pool cash ÷ pool shares`) is bounded to **$0.01–$1,000,000**
+and pool shares to at least 1: outside that range the price either rounds to
+zero or overflows `price_history`'s `numeric(18,6)`, which previously saved
+the company and *then* failed, leaving it with no opening price point. The
+insert and that first price point now share one transaction. The same screen
+delists and relists existing companies, and the owner can delete them
+outright. Twenty placeholder companies across 7 sectors
 are seeded by `db/seed.sql`; replace or extend them at any time, no code
 changes required.
 
@@ -397,7 +414,13 @@ changes required.
 
 Event templates live in the `event_templates` table and are picked at
 random (weighted) whenever an event fires — either manually from **Admin →
-Market events** or via the optional daily cron job (see 1.4). Add a new row to
+Market events** or via the optional daily cron job (see 1.4). A template's
+`weight` is honoured exactly (probability = `weight / total`) via an
+exponential-variate draw; the obvious-looking `order by random() * weight` is
+**wrong** — it takes the max of scaled uniforms, which the heaviest templates
+dominate, and with the seeded weights it fired the rarest three types
+essentially never. Templates that can't apply at that moment (a relist when
+nothing is delisted) are skipped rather than throwing. Add a new row to
 `event_templates` (via the Neon SQL editor or table view) to expand the
 pool; `{company}`, `{sector}`, `{pct}`, and `{amount}` in the
 title/description templates get substituted automatically. See
