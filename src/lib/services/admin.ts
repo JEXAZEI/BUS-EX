@@ -86,17 +86,55 @@ export async function adminSetCompanyDelisted(companyId: string, delisted: boole
  * would cascade-delete along with it). A company that's actually been
  * traded should be delisted instead, which is reversible and preserves
  * history.
+ *
+ * The "has it been traded" check and the delete have to be one atomic step,
+ * locking the company row first. Done as two separate statements, a trade
+ * that committed in between was invisible to the check and then cascade-
+ * deleted by the delete: reproduced against a local database, a student paid
+ * $200, and their holding and trade row both vanished while the cash stayed
+ * gone -- money destroyed silently, with nothing left in the trade log to
+ * explain it. In a game scored on final balances that is a corrupted result,
+ * not just a tidy-up gone wrong.
+ *
+ * `for update` is what makes it safe, because executeTrade takes the same
+ * lock on the same row. Whichever arrives first wins cleanly: if the trade
+ * does, this re-reads and finds the trade history and refuses; if the delete
+ * does, the trade blocks, then finds no company and fails with its normal
+ * "Company not found".
  */
 export async function adminDeleteCompany(companyId: string): Promise<void> {
-  const [tradeRow] = await db.select({ id: trades.id }).from(trades).where(eq(trades.companyId, companyId)).limit(1);
-  if (tradeRow) {
-    throw new AdminError(
-      "This company has trade history and can't be deleted -- delist it instead to preserve records."
+  await withTransaction(async (client) => {
+    const locked = await client.query<{ id: string }>(
+      `select id from companies where id = $1 for update`,
+      [companyId]
     );
-  }
+    if (locked.rows.length === 0) throw new AdminError("Company not found");
 
-  const deleted = await db.delete(companies).where(eq(companies.id, companyId)).returning({ id: companies.id });
-  if (deleted.length === 0) throw new AdminError("Company not found");
+    const traded = await client.query<{ id: string }>(
+      `select id from trades where company_id = $1 limit 1`,
+      [companyId]
+    );
+    if (traded.rows.length > 0) {
+      throw new AdminError(
+        "This company has trade history and can't be deleted -- delist it instead to preserve records."
+      );
+    }
+
+    // Holdings without a trade row shouldn't be reachable today, but a
+    // holding is someone's money either way -- refusing is free insurance
+    // against a future path that grants shares without logging a trade.
+    const held = await client.query<{ user_id: string }>(
+      `select user_id from holdings where company_id = $1 and shares > 0 limit 1`,
+      [companyId]
+    );
+    if (held.rows.length > 0) {
+      throw new AdminError(
+        "Students still hold shares in this company -- delist it instead to preserve their positions."
+      );
+    }
+
+    await client.query(`delete from companies where id = $1`, [companyId]);
+  });
 }
 
 export async function adminSetStartingCash(amount: number): Promise<void> {
@@ -121,6 +159,26 @@ export async function resetGame(): Promise<void> {
   const startingCash = await getDefaultStartingCash();
 
   await withTransaction(async (client) => {
+    // Take every company lock up front, in a fixed order, before touching
+    // anything else. executeTrade locks a company and then the user row, so
+    // a reset that reached `update users` first and then wanted a company
+    // deadlocked against an in-flight trade -- reproduced locally, and
+    // Postgres picked the trade as the victim every time, which means a
+    // student mid-purchase got "Trade failed. Try again." out of nowhere.
+    // Victim choice isn't guaranteed though, so the reset itself could just
+    // as easily have been the one to die.
+    //
+    // Ordering both paths companies-then-users removes the cycle entirely,
+    // and it also closes a narrower hole: a trade that committed in the gap
+    // between `delete from holdings` and the pool reset left its holding
+    // behind against freshly-restored pools, so pool_shares plus holdings
+    // exceeded total_shares and the student kept last term's shares on top
+    // of a full starting balance. Holding the locks from the start means an
+    // in-flight trade either commits before any of this (and gets wiped
+    // with everything else) or waits and then reads the reset pools.
+    // `order by id` keeps two concurrent resets from deadlocking each other.
+    await client.query(`select id from companies order by id for update`);
+
     await client.query(`delete from trades`);
     await client.query(`delete from price_history`);
     await client.query(`delete from net_worth_snapshots`);
