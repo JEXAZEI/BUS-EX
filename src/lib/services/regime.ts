@@ -23,8 +23,8 @@ export const REGIME_DURATION_MINUTES: Record<MarketRegime, [number, number]> = {
   bear: [5 * 60, 9 * 60], // 5-9h -- sharp and comparatively short-lived
 };
 
-// The regime's own contribution to a single ambient-drift tick (drift.ts
-// ticks every 15 minutes -- see DRIFT_INTERVAL_MINUTES there). "The market"
+// The regime's own contribution to a single ambient-drift tick (see
+// DRIFT_INTERVAL_MINUTES in drift.ts). "The market"
 // leans up during bull and down during bear. Bear's magnitude is larger
 // than bull's ("elevator down, stairs up"), matching how real corrections
 // tend to move faster than rallies, even though bull runs win out over the

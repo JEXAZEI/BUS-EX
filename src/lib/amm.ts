@@ -1,6 +1,6 @@
 /**
  * Client-side preview math only, mirroring the constant-product (x*y=k)
- * formula used by the `execute_trade` Postgres function. This is used to
+ * formula used by `executeTrade` in src/lib/services/trades.ts. This is used to
  * show the user an estimated cost/proceeds before they submit an order.
  * It is NEVER trusted as the actual trade price -- the server always
  * recomputes the real price from the live pool state inside the DB

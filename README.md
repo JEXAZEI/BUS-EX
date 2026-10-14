@@ -29,16 +29,39 @@ does the reverse. This means:
 - Prices move automatically from trading activity, with no admin needed to set them.
 - A company's own treasury is never directly drained or inflated by trades — only the pool is.
 - Every trade is computed **inside a single Postgres transaction with row locks** (`executeTrade` in `src/lib/services/trades.ts`), server-side, from the live pool state — the client never sends a price, only a share quantity.
-- On top of trades and admin-triggered events, quiet companies also get a small random price nudge (at most once every 3 minutes) whenever someone loads the dashboard or a company page (`applyAmbientDrift` in `src/lib/services/drift.ts`) — there's no dedicated background worker, so the market only actually advances when someone's logged in and looking at it. To compensate, a company that's fallen behind (nobody's checked on it in a while) gets **backfilled** with one tick per missed 3-minute interval, each with its own historical timestamp, instead of a single tick dated "now" -- capped at 3 days' worth so a long idle stretch doesn't do unbounded work. That's what keeps the price chart's time axis meaningful (real intermediate points, not one big flat gap) and makes the market feel like it kept running over a weekend or overnight, even though the computation only happens the next time someone visits.
-- That nudge isn't pure mean-zero noise: the whole market rotates through **bull / bear / neutral regimes** (`src/lib/services/regime.ts`) -- bull runs last 14–20 hours, neutral 8–12, bear 5–9 -- skewing the drift up during a bull run, down during a bear run, and symmetric when neutral. Bull is also picked most often, so the term leans upward overall while bear stretches are sharper but shorter. That's tuned for a **multi-day (~5 day) class term**: about 8-10 regime changes over the term, each a multi-hour stretch, instead of the mood flipping every few minutes. The per-tick bias is scaled to the 3-minute interval, so a regime's hourly trend is the same as it would be with coarser ticks -- the chart just has more real points to draw. Teachers can see the current regime (and override it) on **Admin**. The current regime is deliberately **not shown anywhere in the UI** — real markets don't announce their own trend, and revealing it would hand students a free signal instead of having them read the price action themselves.
+- On top of trades and admin-triggered events, quiet companies also get a small random price nudge **every 3 minutes** whenever someone loads the dashboard or a company page (`applyAmbientDrift` in `src/lib/services/drift.ts`) — there's no dedicated background worker, so the market only actually advances when someone's logged in and looking at it. To compensate, a company that's fallen behind (nobody's checked on it in a while) gets **backfilled** with one tick per missed 3-minute interval, each with its own historical timestamp, instead of a single tick dated "now" -- capped at `MAX_CATCHUP_TICKS` (1440 ticks = 3 days) so a long idle stretch doesn't do unbounded work. That's what keeps the price chart's time axis meaningful (real intermediate points, not one big flat gap) and makes the market feel like it kept running over a weekend or overnight, even though the computation only happens the next time someone visits. A 3-minute interval is what gives the **1H** chart range ~20 real points to draw; at 15 minutes it had 4, and four points interpolated into a lazy curve read as nothing like a stock chart.
+- The whole catch-up is written in **two queries** (one `UPDATE`, one batched multi-row `INSERT`), not two per tick. Doing it per tick meant a multi-day catch-up made thousands of sequential round trips in a single page load, which over Neon's real latency from a Vercel function blew past the serverless timeout and killed the response mid-stream — the browser reported a corrupted stream and the dashboard rendered blank. Keep it batched.
+- That nudge isn't pure mean-zero noise: the whole market rotates through **bull / bear / neutral regimes** (`src/lib/services/regime.ts`), skewing drift up during a bull run, down during a bear run, and symmetric when neutral. Each regime has its own duration range — **bull 14–20h, neutral 8–12h, bear 5–9h** — and its own selection weight (bull 0.45, neutral 0.35, bear 0.2). Both asymmetries point the same way on purpose: bull runs are picked more often *and* last longer, while bear runs are sharper but shorter ("elevator down, stairs up"), so a reasonably engaged student is likely to come out ahead over a 5-day term rather than facing a coin flip. That works out to roughly ten regime stretches across the term instead of the mood flipping every few minutes.
+- Because ticks are 3 minutes rather than hourly, `REGIME_BIAS` and `IDIOSYNCRATIC_DRIFT_RANGE` are **scaled down to match**: bias is divided by the tick-rate change (it accumulates additively), while the noise range is divided by its *square root* (noise accumulates as a random walk, where variance adds). The net hourly trend and volatility are unchanged — the same movement, sampled 5× more finely. If you change `DRIFT_INTERVAL_MINUTES`, rescale both or you will silently change how the whole market behaves.
+- A long catch-up **rotates through regimes over the gap it is filling** (`buildRegimeTimeline`), rather than replaying the whole gap under whichever regime happens to be active now. This matters more than it sounds: applying one unbroken bias to a 60-hour weekend gap put a high-volatility stock anywhere between 6% and 437% of its pre-gap price depending on a single coin flip at page load. The timeline is built **once per drift pass and shared across every company**, because the regime is market-wide — two stocks backfilling the same minute must agree on what the market was doing.
+- The current regime is deliberately **never shown to students** — real markets don't announce their own trend, and revealing it would hand them a free signal instead of having them read the price action. Teachers and owners *can* see it: **Admin** has a **Market cycle** panel showing which regime is active, when it started, how long it's been running, when it ends and how long until then, plus a form to **override** it (pick a regime and a duration in hours, up to 240).
 - Each company also has its own **volatility** multiplier (`companies.volatility`, editable anytime in **Admin → Companies**) that scales its drift range under whatever the market-wide regime is doing — a "blue chip" set to 0.5 barely moves, a hype stock set to 2.5 swings hard, both under the same bull/bear cycle. The 20 seeded companies already have distinct values matching their personalities (see `db/seed.sql`).
 
 **Leaderboard.** `/leaderboard` ranks every active student by net worth
 (cash + holdings at spot price), computed fresh on every page load
-(`getLeaderboard` in `src/lib/services/leaderboard.ts`). It only shows
-names and total net worth, never which companies someone holds or
-their trade history -- that stays private on their own profile page.
+(`getLeaderboard` in `src/lib/services/leaderboard.ts`). It shows each
+student's **real name** and total net worth, never which companies someone
+holds or their trade history -- that stays private on their own profile page.
 Teacher/owner accounts are excluded since they can't trade.
+
+Note that names are **not unique** (real people share them, and forcing
+uniqueness on a class roster would be wrong), and students can edit their own
+name, so in principle one student can take another's display name here. Staff
+see both the name and the `@username` in **Admin → Users** and can correct it
+in seconds.
+
+**Accounts.** Every account has a username, a real name, and an email, and you
+can sign in with **either the username or the email**, matched
+case-insensitively (`findUserByIdentifier` in `src/lib/services/users.ts`).
+The email is just a second thing you're allowed to type at login -- nothing is
+ever sent to it. Students can fix their own name on their profile page;
+teachers and owners can fix any student's in **Admin → Users**.
+
+**Live-ish updates.** The dashboard, company, leaderboard, profile and admin
+pages mount an `AutoRefresh` component that re-renders the route every 20
+seconds, skipped entirely while the tab is in the background so a forgotten
+tab doesn't hammer the database all period. There are no websockets — a
+refresh is also what advances the market, since drift runs on page load.
 
 **Price charts** (company page and profile net-worth) have Google Finance
 -style range buttons -- **1H / 1D / 5D** -- scaled to this game's actual
@@ -76,6 +99,15 @@ real time-labeled x-axis instead of a bare unlabeled line
    accounts, so admin accounts need to be inserted directly.
 4. Copy the **pooled connection string** from Neon's Connection Details panel
    (it looks like `postgres://user:password@ep-xxxx.neon.tech/dbname?sslmode=require`) — this is your `DATABASE_URL`.
+
+> **There is no migration runner.** `db/schema.sql` is the DDL for a *fresh*
+> database; nothing replays it against an existing one, and the app never
+> alters its own schema at startup. If you change the schema you need to
+> (a) update `db/schema.sql` for future fresh installs **and** (b) write a
+> separate `ALTER TABLE …` script and run it yourself in Neon's SQL Editor.
+> Test that script against a throwaway database first — a past migration that
+> added `email` looked fine but assigned two accounts the same value, which
+> then made the `users_email_lower_idx` unique index fail to build.
 
 ### 1.1b Pre-creating admin accounts
 
@@ -146,7 +178,11 @@ makes a regular student account.
 hits `/api/cron/random-event` once a day (at 16:00 UTC, adjust to taste) to
 fire a random market event automatically, in addition to the teacher's manual
 "fire event" button in `/admin`. To enable it, set `CRON_SECRET` in Vercel
-(any long random string) — the route checks it and does nothing without it.
+(any long random string); the route requires a matching
+`Authorization: Bearer <CRON_SECRET>` header, returns **501** if the secret
+isn't configured at all, and **401** if it doesn't match. It's guarded by a
+shared secret rather than a session because Vercel Cron requests carry no
+browser cookies.
 Vercel's free Hobby plan only allows daily cron jobs (not hourly), which is
 why it's scheduled once a day; the manual trigger in the admin panel always
 works regardless, so scheduled events are a nice-to-have, not a requirement.
@@ -175,10 +211,23 @@ works regardless, so scheduled events are a nice-to-have, not a requirement.
 - **Explicit per-request authorization** — every API route re-derives the
   caller's identity and role from their session cookie
   (`getCurrentProfile()` / `getSessionUser()`) and checks it before doing
-  anything sensitive; there's no client-trusted "am I an admin" flag. Owner-
-  only actions (deactivating/deleting accounts, resetting a teacher's or
-  owner's password) are checked in their own route or service in addition to being a distinct role from teacher (see below), so
-  permissions can't be spoofed by editing a request body.
+  anything sensitive; there's no client-trusted "am I an admin" flag. Every
+  route also re-checks `is_active`, so deactivating an account cuts its access
+  immediately rather than at next login. Owner-only actions (deactivating and
+  deleting accounts) are checked in their own route in addition to being a
+  distinct role from teacher (see below), so permissions can't be spoofed by
+  editing a request body.
+- **Authorization that depends on the target row lives in the service, not the
+  route** — a teacher may reset or rename a *student*, but only the owner may
+  do either to another teacher or to the owner. Writing a password hash
+  directly is equivalent to taking the account over, so a teacher who could
+  reset the owner would be one request away from promoting themselves. Those
+  checks sit in `resetUserPassword` / `renameUserAsStaff`
+  (`src/lib/services/users.ts`), where the target's role has already been
+  read, so a future caller can't route around them; the hidden buttons in the
+  UI are cosmetic only. Self-service rename
+  (`POST /api/profile/name`) accepts **no `userId` at all** — it writes to the
+  caller's own session id, so it can't be aimed at another account.
 - **Data access is scoped per-user in application code** — every query that
   returns account-specific data (holdings, trades, cash balance, net-worth
   history) is filtered by the authenticated caller's own `user_id` at the
@@ -193,18 +242,70 @@ works regardless, so scheduled events are a nice-to-have, not a requirement.
   (`src/lib/auth/session.ts`). The session token is never written to
   `localStorage` or exposed to client-side JavaScript, and a database leak
   alone can't be used to forge a session.
-- **Login rate limiting** — `src/lib/rateLimit.ts` tracks failed login
-  attempts per (username, IP) pair in a `login_attempts` table and locks
-  out further attempts for 15 minutes after 5 failures, plus a looser
-  per-IP ceiling (200 failures / 15 minutes) across all accounts, mitigating
-  brute-force password guessing.
+- **Session revocation** — changing a password (self-service or via an admin
+  reset) and deactivating an account both delete every session row for that
+  user. A session is only ever checked against the password at login time, so
+  without this a stolen session would stay valid for up to 30 days after the
+  password changed underneath it. The self-service path issues the caller a
+  fresh session afterward so they aren't logged out of the device they just
+  used.
+- **Constant-time login** — the "no such account" path runs a throwaway bcrypt
+  comparison (`burnPasswordComparison` in `src/lib/auth/password.ts`) before
+  answering. Returning early instead made a miss answer in ~13 ms and a wrong
+  password in ~347 ms, with no overlap — a completely reliable oracle for
+  "does this account exist", which is exactly what the single shared
+  `"Invalid login or password"` message exists to prevent.
+- **Rate limiting on every endpoint** — `src/lib/rateLimit.ts`, all DB-backed.
+  Login is capped **both** per (identifier, IP) at 5 failures per 15 minutes
+  *and* per IP alone at 200 failures per 15 minutes; without the second one,
+  each account carried its own fresh budget and a single machine could work
+  through the whole roster five guesses at a time. Trades are capped at 10 per
+  10 seconds per user, password changes at 5 per 15 minutes, self-service
+  renames at 10 per hour, and each admin route at 5–40 per minute depending on
+  how destructive it is.
+  - The limiters **fail open** on a database error. Failing closed would lock
+    an entire class out of a lesson over a transient Neon blip; the error is
+    still logged.
+  - Signup is limited per IP but set deliberately high (200 per 10 minutes)
+    because **a whole class shares one school IP**. Any per-IP limit here has
+    to clear ~30 students signing up within a few minutes of each other.
+  - The client IP is resolved from `x-vercel-forwarded-for`, then `x-real-ip`,
+    then the **last** hop of `X-Forwarded-For` (`getClientIp`). Reading the
+    *first* hop — as this used to — hands the client control of its own
+    rate-limit bucket, since a proxy *appends* to that header rather than
+    replacing it: rotating the header got a fresh budget on every request and
+    defeated the login limiter entirely. Don't "simplify" this back.
+- **Password policy** — minimum 8 characters (maximum 72, bcrypt's input
+  limit), enforced identically on all three paths that set a password
+  (signup, self-service change, admin reset). On top of the length rule there's
+  a denylist of obviously-guessable passwords (`COMMON_PASSWORDS` in
+  `src/lib/validation.ts`, including classroom-flavoured guesses like
+  `student123` and `teacher1`), and a rule rejecting a password that is just
+  the account's own username or email. It's deliberately a denylist rather
+  than a complexity rule — "must contain a symbol" mostly produces forgotten
+  passwords, and a reset mid-period costs a student real trading time. Because
+  that also rules out the passwords a teacher would naturally invent, the
+  admin reset form has a **Suggest** button that generates something like
+  `SwiftFalcon72` — readable aloud across a classroom and never on the
+  denylist.
 - **Input validation & sanitization** — every API route validates its input
   with `zod` schemas (`src/lib/validation.ts`) before touching the database:
   usernames/tickers/sectors are restricted to safe character sets, numeric
-  fields are bounded, and text fields are length-limited. React escapes all
+  fields are bounded, and text fields are length-limited. Names allow letters
+  (including accented and non-Latin ones), spaces, apostrophes, periods and
+  hyphens, but not digits, emoji or angle brackets. React escapes all
   rendered text by default, so user-supplied strings (usernames, company
   descriptions, event text) can't inject HTML/JS into other users' pages
   (stored XSS).
+- **CSV formula-injection guard** — the term export
+  (`src/lib/services/export.ts`) prefixes an apostrophe onto any text cell
+  starting with `=`, `+`, `-`, `@`, tab or CR. Validation legitimately allows a
+  leading hyphen in a name (hyphenated names) and a leading `+`, `@` or `-` in
+  a username or email, all of which Excel and Sheets evaluate as formulas, so
+  a student registering as `-Alice` or `@bob` turned a cell in the teacher's
+  gradebook into `#NAME?`. Numeric columns are deliberately left unguarded so
+  they still sort as numbers. The file's *structure* was never at risk —
+  no commas, quotes or newlines can get through validation in the first place.
 - **Distinct admin roles in the schema** — `users.role` is a Postgres
   `enum ('student', 'teacher', 'owner')`, not a boolean "is_admin" flag, so
   teacher and owner permissions can diverge without a schema rewrite.
@@ -214,23 +315,53 @@ works regardless, so scheduled events are a nice-to-have, not a requirement.
   `X-Content-Type-Options`, `Referrer-Policy`, and a restrictive
   `Permissions-Policy` on every response.
 
-**Known residual risk:** `npm audit` currently flags two advisories in
-Next.js 14.2.x (an SSRF issue in the `rewrites()` config feature and an
-internal Server Actions endpoint disclosure issue) that are only fixed in
-Next.js 16, which is a breaking major-version upgrade. This app doesn't use
-`rewrites()` or Server Actions (all mutations go through explicit Route
-Handlers under `/api`), so exposure is low, but you should periodically run
-`npm audit` and consider upgrading Next.js as the ecosystem matures.
+### Known residual risks
+
+- **Dependency advisories.** `npm audit` flags a growing list against the
+  pinned Next.js 14.2.x and the Tailwind/ESLint dev tree — as of the last
+  check, 16 findings including one **critical** in `next` itself. Most of the
+  significant ones are only fixed by major upgrades (`next` 16,
+  `tailwindcss` 4, `eslint-config-next` 16), which are breaking changes. A
+  handful of transitive ones (`brace-expansion`, `js-yaml`, `nanoid`,
+  `fast-glob`, `source-map-js`) have non-major fixes that plain
+  `npm audit fix` would take. Several of the `next` advisories don't apply to
+  how this app is built — it uses no `rewrites()`, no Server Actions, and no
+  `next/image` optimizer; every mutation is an explicit Route Handler under
+  `/api`. Run `npm audit` yourself rather than trusting this paragraph's
+  numbers, since new CVEs land continuously. **Don't attempt a major upgrade
+  in the week you're teaching with this.**
+- **Multiple accounts per person.** `alice+tag@school.org` and
+  `alice@school.org` are distinct strings, so one student can register several
+  accounts. Against an AMM that enables price manipulation: alt accounts buy
+  to push a stock up, the main account sells into the inflated price. This
+  predates the email field — a username alone was always enough — and the real
+  defence is that staff see the entire roster in **Admin → Users**. Blocking
+  `+` addressing is a product decision, not a bug fix.
+- **Delisted holdings can't be sold but still count at full value.** Drift
+  skips delisted companies so the price freezes, and `executeTrade` rejects
+  trades on them, while net worth still counts the position. Late in a term
+  that makes a delisted stock an accidental risk-free hedge, which works
+  against "most money after 5 days." Left as-is deliberately; it's a
+  game-balance call, not a defect.
 
 ---
 
 ## 3. Roles
 
-| Role | Companies | Events | Game settings | Reset game | User accounts |
-|---|---|---|---|---|---|
-| Student | trade only | view only | — | — | own account only |
-| Teacher | add/edit/delist | trigger | adjust starting cash | yes | reset student passwords, fix student names |
-| Owner | add/edit/delist/delete | trigger | adjust starting cash | yes | reset any password, fix any name, deactivate/delete accounts |
+| Role | Companies | Events | Market cycle | Game settings | Reset game | Other accounts |
+|---|---|---|---|---|---|---|
+| Student | trade only | view only | not visible | — | — | — |
+| Teacher | add/edit/delist | trigger | view + override | adjust starting cash | yes | reset password, rename — **students only** |
+| Owner | add/edit/delist, **delete** | trigger | view + override | adjust starting cash | yes | reset password, rename, deactivate, delete — **anyone** |
+
+Everyone can change their own password and edit their own name on their
+profile page, whatever their role.
+
+Resetting a password or renaming an account is restricted *by the target's
+role*, not just the caller's: teachers act on students, the owner acts on
+anyone. The reason is specific to password resets — setting a hash directly is
+account takeover, so a teacher able to reset the owner could promote
+themselves — and renaming follows the same rule for consistency.
 
 The public `/signup` form always creates a student account. Teacher/owner
 accounts are pre-created directly with a SQL insert (see "Pre-creating admin
@@ -266,7 +397,7 @@ changes required.
 
 Event templates live in the `event_templates` table and are picked at
 random (weighted) whenever an event fires — either manually from **Admin →
-Market events** or via the optional daily cron job. Add a new row to
+Market events** or via the optional daily cron job (see 1.4). Add a new row to
 `event_templates` (via the Neon SQL editor or table view) to expand the
 pool; `{company}`, `{sector}`, `{pct}`, and `{amount}` in the
 title/description templates get substituted automatically. See
@@ -294,10 +425,36 @@ src/
     auth/
       password.ts                      -- bcrypt hashing
       session.ts                       -- opaque session tokens + httpOnly cookies
-    services/                          -- all business logic (trades, events, admin actions)
+      errors.ts                        -- isUniqueViolation(), unwrapping Drizzle's error wrapper
+    services/                          -- ALL business logic lives here, never in route handlers
+      trades.ts                        -- executeTrade: the one authoritative trade path
+      drift.ts                         -- applyAmbientDrift: the no-worker market tick
+      regime.ts                        -- bull/bear/neutral cycle + buildRegimeTimeline
+      events.ts                        -- market event templates and effects
+      users.ts                         -- login lookup, password reset, rename, deactivate
+      auth.ts                          -- signup
+      admin.ts                         -- companies, game settings, resetGame
+      quotes.ts, leaderboard.ts, profile.ts, students.ts, recap.ts, export.ts
     session.ts                         -- requireProfile/requireAdmin/requireOwner
-    validation.ts                      -- zod schemas
-    rateLimit.ts                       -- login attempt limiter
-    amm.ts                             -- client-side trade preview math
+    validation.ts                      -- zod schemas (all of them)
+    rateLimit.ts                       -- login, trade and general-purpose limiters + getClientIp
+    amm.ts                             -- client-side trade preview math (never trusted server-side)
     types.ts                           -- shared app-level types
+HANDOFF.md                             -- cold-start notes for a new contributor/agent
 ```
+
+A few conventions worth keeping:
+
+- Route handlers do **auth → rate limit → parse → delegate → map errors to
+  status codes**, and nothing else. Business logic goes in
+  `src/lib/services/*`.
+- `executeTrade` is the **only** authoritative trade path. It uses
+  `SELECT … FOR UPDATE` inside `withTransaction`. Don't write a second one,
+  and never let the client send a price — only a share quantity.
+- Each failure mode gets its own error class (`SignupError`,
+  `PasswordPolicyError`, `ResetNotPermittedError`, `RenameNotPermittedError`,
+  `EventError`) so routes can map it to the right status code.
+- There is **no automated test suite.** Verification is a manual loop against
+  a local Postgres — see `HANDOFF.md` for the setup and the traps.
+- Comments here explain *why*, and often record the failure that motivated the
+  code. That's deliberate; please match it.
