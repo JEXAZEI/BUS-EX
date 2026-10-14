@@ -16,6 +16,11 @@ export interface ExportRow {
  * Final standings for every active student, plus how many trades they made
  * -- meant to be downloaded right before "Reset game for new term" wipes
  * everything, so a teacher has a record for grading.
+ *
+ * Ties break on name then id, matching leaderboard.ts. The Rank column here
+ * is just this ordering numbered 1..n, and it lands in a gradebook, so two
+ * students on identical net worth need to come out in a defined order rather
+ * than whichever one the query plan happened to emit first.
  */
 export async function getTermExportRows(): Promise<ExportRow[]> {
   const result = await db.execute<{
@@ -43,7 +48,7 @@ export async function getTermExportRows(): Promise<ExportRow[]> {
     ) t on t.user_id = u.id
     where u.role = 'student' and u.is_active
     group by u.id, u.username, u.full_name, u.email, u.cash_balance, t.trade_count
-    order by net_worth desc
+    order by net_worth desc, u.full_name asc, u.id asc
   `);
 
   return result.rows.map((r) => ({
