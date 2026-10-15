@@ -382,7 +382,20 @@ redeploy needed.
 ## 4. Resetting the game for a new class term
 
 1. Log in as the Owner or Teacher and go to **Admin → New semester**.
-2. Click **Reset game for new term**, then confirm.
+2. **Download the results CSV first** — the reset wipes exactly the data it's
+   built from, so once you confirm there's nothing left to export.
+3. Click **Reset game for new term**, then confirm.
+
+**The results CSV.** Columns are Rank, Name, Email, Username, Status, Net
+Worth, Cash, Holdings Value, Trades. It reports **every** student, including
+deactivated accounts, because this is the only record of the term and
+deactivating someone is usually the moment you most want their numbers kept.
+Deactivated rows are marked `Deactivated` in Status, sorted to the bottom,
+and left blank in Rank — so a disabled account can't take a placing off a
+student who played the whole term, and the Rank column stays numeric for
+sorting. The end-of-term **recap** goes the other way and leaves deactivated
+accounts out of all three of its categories, since that one gets shown to the
+class.
 
 This wipes all trades, price history, holdings, net-worth history, and the
 event log, resets every student's cash balance to the configured starting

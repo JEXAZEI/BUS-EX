@@ -24,12 +24,21 @@ export async function getTermRecap(): Promise<TermRecap> {
   // Grouped by account, not by name: names aren't unique (real people share
   // them), and grouping on full_name summed two different "Sam Lee"s into one
   // phantom trader who could out-rank the real most active student.
+  //
+  // Deactivated accounts are excluded here and in biggestTrade below, which
+  // is what topTraders already does (it comes from getLeaderboard). Without
+  // it the three categories disagreed: with every student deactivated,
+  // topTraders came back empty while this still crowned someone. This reel
+  // gets shown to the class, and an account is usually deactivated precisely
+  // because something went wrong with it -- not the thing to celebrate. The
+  // grading export deliberately goes the other way and reports everyone.
   const mostActiveResult = await db.execute<{ full_name: string; trade_count: string }>(sql`
     select u.full_name, count(*) as trade_count
     from trades t
     join users u on u.id = t.user_id
+    where u.is_active
     group by u.id, u.full_name
-    order by trade_count desc
+    order by trade_count desc, u.full_name asc, u.id asc
     limit 1
   `);
   const mostActiveRow = mostActiveResult.rows[0];
@@ -47,7 +56,8 @@ export async function getTermRecap(): Promise<TermRecap> {
     from trades t
     join users u on u.id = t.user_id
     join companies c on c.id = t.company_id
-    order by t.cash_amount desc
+    where u.is_active
+    order by t.cash_amount desc, t.created_at asc, t.id asc
     limit 1
   `);
   const biggestRow = biggestTradeResult.rows[0];
