@@ -154,10 +154,11 @@ export async function applyAmbientDrift(): Promise<MarketRegime> {
           const impactPct = volatility * (bias + randomInRange(noiseMin, noiseMax));
           let factor = 1 + impactPct;
           if (factor <= 0.01) factor = 0.01;
-          // Same floor the shocks use (MIN_SPOT_PRICE in events.ts): a tick
-          // whose price rounds to 0.000000 is rejected by price_history's
-          // `price > 0` check, and a long bear run on a high-volatility
-          // company compounds toward exactly that.
+          // Same band the shocks use (MIN_SPOT_PRICE / MAX_SPOT_PRICE in
+          // events.ts). A tick whose price rounds to 0.000000 is rejected by
+          // price_history's `price > 0` check, and one that overflows
+          // numeric(18,4)/(18,6) is rejected outright -- a long run on a
+          // high-volatility company compounds toward both ends.
           poolCash = clampPoolCash(poolCash * factor, poolShares);
 
           const tickTime = new Date(tickMs);

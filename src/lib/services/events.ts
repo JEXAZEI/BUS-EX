@@ -46,10 +46,35 @@ export function randomInRange(min: number, max: number): number {
  */
 export const MIN_SPOT_PRICE = 0.0001;
 
-/** Clamps pool cash so `poolCash / poolShares` can never fall below MIN_SPOT_PRICE. */
+/**
+ * The same problem from the other end, and just as reachable: 60 of the
+ * +15%..+45% template at the largest legally creatable company (pool cash
+ * $100,000,000 over 100 shares) returned 500 "numeric field overflow" 8
+ * times, with pool cash up at 96 trillion against numeric(18,4)'s ceiling
+ * and the price pressing numeric(18,6)'s.
+ *
+ * Both limits matter and which one binds depends on the share count, so the
+ * clamp takes the lower of them. A billion dollars a share is already
+ * nonsense for a classroom -- it is a thousand times the most expensive
+ * company the form will create -- so this only ever bites runaway abuse,
+ * never a real bull run.
+ */
+export const MAX_SPOT_PRICE = 1_000_000_000;
+
+/** Comfortably inside numeric(18,4), which tops out near 100 trillion. */
+const MAX_POOL_CASH = 1_000_000_000_000;
+
+/**
+ * Holds pool cash inside the band where both `pool_cash` and the
+ * `price_history.price` derived from it stay representable, so neither end
+ * of a runaway price can turn an insert into a 500.
+ */
 export function clampPoolCash(poolCash: number, poolShares: number): number {
   const floor = MIN_SPOT_PRICE * poolShares;
-  return poolCash < floor ? floor : poolCash;
+  const ceiling = Math.min(MAX_POOL_CASH, MAX_SPOT_PRICE * poolShares);
+  if (poolCash < floor) return floor;
+  if (poolCash > ceiling) return ceiling;
+  return poolCash;
 }
 
 /**
@@ -87,8 +112,9 @@ export async function applyPriceShock(
   const poolCash = parseFloat(company.pool_cash);
   const poolShares = parseFloat(company.pool_shares);
   // A shock has no counterparty -- it invents or destroys pool cash by
-  // design -- so holding the price at the floor here costs nothing. See
-  // MIN_SPOT_PRICE for what used to happen without it.
+  // design -- so holding the price inside the representable band here costs
+  // nothing. See MIN_SPOT_PRICE / MAX_SPOT_PRICE for what used to happen
+  // without it, in both directions.
   const newPoolCash = clampPoolCash(poolCash * factor, poolShares);
 
   await client.query(
