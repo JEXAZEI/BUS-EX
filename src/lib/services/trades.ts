@@ -2,6 +2,7 @@ import "server-only";
 import { eq, desc } from "drizzle-orm";
 import { db, withTransaction } from "@/lib/db/client";
 import { trades } from "@/lib/db/schema";
+import { MIN_SPOT_PRICE } from "@/lib/services/events";
 import type { TradeSide } from "@/lib/types";
 
 export class TradeError extends Error {}
@@ -190,6 +191,21 @@ export async function executeTrade(
       await client.query(
         `update holdings set shares = shares - $1 where user_id = $2 and company_id = $3`,
         [shares, userId, companyId]
+      );
+    }
+
+    // A sell takes cash out of the pool and puts shares back in, so a big
+    // enough one on an already-collapsed company drives the spot price under
+    // what price_history can store (numeric(18,6), `price > 0`) and the
+    // insert below would 500. Unlike a shock, a trade has a counterparty, so
+    // the price can't just be clamped -- that would hand the student cash the
+    // pool never gave up. Refusing is the honest outcome, and the message
+    // says what happened rather than "Trade failed. Try again."
+    // Still inside the transaction, so the cash and holdings writes above
+    // roll back with it.
+    if (newPoolCash / newPoolShares < MIN_SPOT_PRICE) {
+      throw new TradeError(
+        "That order would push the price below the market's minimum. Try selling fewer shares."
       );
     }
 

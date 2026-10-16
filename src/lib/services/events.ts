@@ -26,6 +26,33 @@ export function randomInRange(min: number, max: number): number {
 }
 
 /**
+ * Lowest spot price the market will ever quote, and a hard floor on every
+ * price this app writes.
+ *
+ * price_history.price is numeric(18,6) with `check (price > 0)`, so anything
+ * under 0.0000005 rounds to 0.000000 and the insert is rejected. That is
+ * reachable: a company may legally be created at $0.01 (the validated
+ * minimum), and repeated negative shocks walk it straight into the floor.
+ * Reproduced by firing the -45%..-15% template at one company 40 times --
+ * 13 of them came back 500 "Failed to trigger event", and the company then
+ * sat permanently stuck just above the boundary where every further shock
+ * failed. The same break would hit the daily cron silently, and any random
+ * event unlucky enough to pick that company.
+ *
+ * A hundredth of a cent is far below anything a classroom game needs to
+ * distinguish -- a stock here is already dead -- and it leaves three orders
+ * of magnitude of headroom above the representable minimum, so rounding can
+ * never land on zero.
+ */
+export const MIN_SPOT_PRICE = 0.0001;
+
+/** Clamps pool cash so `poolCash / poolShares` can never fall below MIN_SPOT_PRICE. */
+export function clampPoolCash(poolCash: number, poolShares: number): number {
+  const floor = MIN_SPOT_PRICE * poolShares;
+  return poolCash < floor ? floor : poolCash;
+}
+
+/**
  * Shifts a company's spot price by `impactPct` by rescaling pool_cash only
  * (pool_shares is left untouched). Shared by admin/random market events and
  * by the ambient background drift in src/lib/services/drift.ts.
@@ -59,7 +86,10 @@ export async function applyPriceShock(
 
   const poolCash = parseFloat(company.pool_cash);
   const poolShares = parseFloat(company.pool_shares);
-  const newPoolCash = poolCash * factor;
+  // A shock has no counterparty -- it invents or destroys pool cash by
+  // design -- so holding the price at the floor here costs nothing. See
+  // MIN_SPOT_PRICE for what used to happen without it.
+  const newPoolCash = clampPoolCash(poolCash * factor, poolShares);
 
   await client.query(
     `update companies set pool_cash = $1, updated_at = now() where id = $2`,

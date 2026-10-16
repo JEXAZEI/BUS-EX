@@ -1,7 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { withTransaction, db } from "@/lib/db/client";
-import { round, randomInRange } from "@/lib/services/events";
+import { round, randomInRange, clampPoolCash } from "@/lib/services/events";
 import {
   getRegimeStatus,
   buildRegimeTimeline,
@@ -154,7 +154,11 @@ export async function applyAmbientDrift(): Promise<MarketRegime> {
           const impactPct = volatility * (bias + randomInRange(noiseMin, noiseMax));
           let factor = 1 + impactPct;
           if (factor <= 0.01) factor = 0.01;
-          poolCash *= factor;
+          // Same floor the shocks use (MIN_SPOT_PRICE in events.ts): a tick
+          // whose price rounds to 0.000000 is rejected by price_history's
+          // `price > 0` check, and a long bear run on a high-volatility
+          // company compounds toward exactly that.
+          poolCash = clampPoolCash(poolCash * factor, poolShares);
 
           const tickTime = new Date(tickMs);
           const price = round(poolCash / poolShares, 6);
