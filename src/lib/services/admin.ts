@@ -137,11 +137,22 @@ export async function adminDeleteCompany(companyId: string): Promise<void> {
   });
 }
 
+/**
+ * `default_starting_cash` is numeric(14,2), so "positive" was not a strong
+ * enough guard: 0.001 passed it and then stored as 0.00. Every new signup
+ * and every game reset handed students $0.00 and no trade could be placed
+ * ("Insufficient cash balance"), with the settings form showing 0.00 rather
+ * than what was typed. A dollar is the smallest amount that survives the
+ * column and is unambiguously a real figure; the value is also rounded to
+ * cents here so what gets stored is what gets displayed back.
+ */
 export async function adminSetStartingCash(amount: number): Promise<void> {
-  if (amount <= 0) throw new AdminError("Starting cash must be positive");
+  if (!Number.isFinite(amount) || amount < 1) {
+    throw new AdminError("Starting cash must be at least $1");
+  }
   await db
     .update(gameSettings)
-    .set({ defaultStartingCash: String(amount), updatedAt: new Date() })
+    .set({ defaultStartingCash: amount.toFixed(2), updatedAt: new Date() })
     .where(eq(gameSettings.id, 1));
 }
 
