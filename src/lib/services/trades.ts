@@ -19,6 +19,42 @@ function round(n: number, decimals: number): number {
   return Math.round(n * f) / f;
 }
 
+/**
+ * Cash always rounds to the cent against whoever is trading: up when they
+ * pay, down when they're paid.
+ *
+ * Rounding to nearest looks fairer and is the exploit. Share quantities are
+ * exact to 4 dp while cash is only exact to the cent, so a quantity whose
+ * fair cost lands just above a half-cent gets billed down -- the student
+ * receives shares worth more than they were charged, and the gap is real
+ * money the moment they sell. The direction is selectable, so it isn't luck:
+ * at a $100,000 / 2,500-share pool, buying 0.0036 shares cost $0.144 and
+ * billed $0.14, free value on every single trade. Driven through the real
+ * API, 60 of those plus one sell of the whole position turned $1000.00 into
+ * $1000.24 -- roughly $14/hour at the trade rate limit, no market risk, in a
+ * game scored purely on final balance.
+ *
+ * Rounding against the trader makes the sub-cent remainder a cost instead of
+ * a prize, so the loop bleeds a cent a round-trip rather than paying out,
+ * and the remainder stays in the pool where it reads as a tiny spread. On a
+ * real order it's a rounding error (a cent on a $200 trade); only
+ * sub-cent-sized orders feel it, which is exactly who should.
+ */
+function cashCeil(n: number): number {
+  return Math.ceil(n * 100) / 100;
+}
+
+function cashFloor(n: number): number {
+  return Math.floor(n * 100) / 100;
+}
+
+/**
+ * Orders worth less than a cent are refused outright rather than billed up
+ * to a cent, so nobody is charged real money for a sliver of a share they
+ * didn't mean to order.
+ */
+const MIN_TRADE_VALUE = 0.01;
+
 /** Scale of every share column in db/schema.sql (numeric(18, 4)). */
 const SHARE_DECIMALS = 4;
 
@@ -78,6 +114,27 @@ export async function executeTrade(
     const poolCash = parseFloat(company.pool_cash);
     const poolShares = parseFloat(company.pool_shares);
     const userCash = parseFloat(user.cash_balance);
+
+    // `k` sets the *price* for this one trade and nothing more. The pool is
+    // then moved by exactly the cash that changed hands, which leaves it a
+    // fraction of a cent off the k curve -- deliberately.
+    //
+    // Pricing off k but settling on the unrounded delta used to mean the
+    // student was charged round(delta, 2) while the pool received the full
+    // delta, so up to half a cent was conjured or destroyed per trade. The
+    // direction is selectable: at these pool values a 0.0036-share buy cost
+    // $0.144 and billed $0.14, so the student got $0.004 of pool value free,
+    // every single time. Driven through the real API, 60 such buys followed
+    // by one sell of the whole position turned $1000.00 into $1000.24 --
+    // about $14/hour at the trade rate limit, with no market risk at all, in
+    // a game whose entire score is final balance.
+    //
+    // Settling on the rounded figure makes student cash plus pool cash
+    // exactly conserved, so there is nothing left to skim: whatever you pay
+    // in, you get back out and no more. k drifting is harmless because it is
+    // recomputed from the live pool on every trade and never stored, so
+    // nothing accumulates. Do not "restore" the invariant by deriving
+    // newPoolCash from k again -- that is this bug.
     const k = poolCash * poolShares;
 
     let newPoolCash: number;
@@ -89,12 +146,15 @@ export async function executeTrade(
       if (newPoolShares <= 0) {
         throw new TradeError("Not enough shares available in the market for that order");
       }
-      newPoolCash = k / newPoolShares;
-      cashAmount = round(newPoolCash - poolCash, 2);
-      if (cashAmount <= 0) throw new TradeError(TOO_SMALL);
+      const fairCost = k / newPoolShares - poolCash;
+      if (fairCost < MIN_TRADE_VALUE) throw new TradeError(TOO_SMALL);
+      cashAmount = cashCeil(fairCost);
       if (cashAmount > userCash) {
         throw new TradeError("Insufficient cash balance for this purchase");
       }
+      // The pool receives exactly what the student is charged -- see the
+      // note on `k` above.
+      newPoolCash = poolCash + cashAmount;
 
       await client.query(`update users set cash_balance = cash_balance - $1 where id = $2`, [
         cashAmount,
@@ -116,10 +176,12 @@ export async function executeTrade(
       }
 
       newPoolShares = round(poolShares + shares, SHARE_DECIMALS);
-      newPoolCash = k / newPoolShares;
-      cashAmount = round(poolCash - newPoolCash, 2);
-      if (cashAmount <= 0) throw new TradeError(TOO_SMALL);
+      const fairProceeds = poolCash - k / newPoolShares;
+      if (fairProceeds < MIN_TRADE_VALUE) throw new TradeError(TOO_SMALL);
+      cashAmount = cashFloor(fairProceeds);
       if (cashAmount >= poolCash) throw new TradeError("Invalid trade");
+      // The pool gives up exactly what the student is paid.
+      newPoolCash = poolCash - cashAmount;
 
       await client.query(`update users set cash_balance = cash_balance + $1 where id = $2`, [
         cashAmount,
