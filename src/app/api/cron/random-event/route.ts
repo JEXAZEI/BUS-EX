@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { runMarketEvent, EventError } from "@/lib/services/events";
+import { checkAndRecordRateLimit } from "@/lib/rateLimit";
 
 // Hit on a schedule by Vercel Cron (see vercel.json) to fire a random
 // market event automatically, satisfying "periodically, on a timer" from
@@ -16,6 +17,16 @@ export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
   if (authHeader !== `Bearer ${secret}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // One global bucket, checked after the secret so a wrong guess can't use
+  // up the budget. Every other endpoint in this app is rate limited and this
+  // one wasn't, which left a leaked CRON_SECRET able to fire unlimited market
+  // events and wreck a term. Vercel's schedule uses one call a day, so 30 an
+  // hour cannot interfere with it (or with a retry) while still bounding the
+  // damage if the secret gets out.
+  if (!(await checkAndRecordRateLimit("system", "cron-random-event", 3600, 30))) {
+    return NextResponse.json({ error: "Too many requests. Slow down." }, { status: 429 });
   }
 
   try {
