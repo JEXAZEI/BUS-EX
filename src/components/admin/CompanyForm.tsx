@@ -4,6 +4,14 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Company } from "@/lib/types";
 
+/** Live preview of the implied opening price, blank until both fields make sense. */
+function formatStartingPrice(cash: string, shares: string): string {
+  const c = parseFloat(cash);
+  const s = parseFloat(shares);
+  if (!Number.isFinite(c) || !Number.isFinite(s) || s <= 0 || c <= 0) return "--";
+  return `$${(c / s).toFixed(2)}`;
+}
+
 export function CompanyForm({ company, onDone }: { company?: Company; onDone?: () => void }) {
   const router = useRouter();
   const [name, setName] = useState(company?.name ?? "");
@@ -125,9 +133,12 @@ export function CompanyForm({ company, onDone }: { company?: Company; onDone?: (
           />
         </div>
       </div>
+      {/* `shares || "1"` only covers an empty box -- a literal "0" is a
+          truthy string, so this read "$Infinity" while someone typed, and
+          "$NaN" for any non-numeric input. The server rejects those values
+          anyway; this is just about not showing a teacher nonsense mid-edit. */}
       <p className="text-xs text-gray-400">
-        Starting price = pool cash / pool shares = $
-        {(parseFloat(startingPoolCash || "0") / parseFloat(startingPoolShares || "1")).toFixed(2)}
+        Starting price = pool cash / pool shares = {formatStartingPrice(startingPoolCash, startingPoolShares)}
       </p>
       <div>
         <label className="label">Volatility</label>
