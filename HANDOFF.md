@@ -2,8 +2,8 @@
 
 **Repo:** `github.com/JEXAZEI/BUS-EX`
 **Working branch:** `claude/jex-classroom-stock-exchange-y23a47` (the pre-live bug-hunt pass in §5b was pushed to `claude/charming-clarke-8k6snc`, which contains everything on this branch plus that pass)
-**HEAD at time of writing:** `c9b577f` — *Add name editing for students and staff*
-**Last updated:** 2026-09-28
+**HEAD at time of writing:** see `git log` — this doc was last revised at `687c263`
+**Last updated:** 2026-10-16
 
 ---
 
@@ -241,6 +241,26 @@ Found by running the app (local Postgres + production build + Playwright), not b
 
 Also verified: 30 concurrent students (signup + 360 mixed trades/page loads + events) with zero 5xx and exact share conservation; reset flow end to end; 3-day drift backfill (0.56 s, prices 67-139% of start). README's stale drift/regime/roles facts were corrected.
 
+## 5c. Game-integrity and numeric-bounds pass (after `63ccaca`)
+
+All reproduced through the running app before fixing, and re-run after.
+
+1. **A rounding arbitrage printed risk-free money** (`3fedade`) — the worst thing found in the project. Cash rounded to the *nearest* cent while share quantities are exact to 4 dp, so a quantity whose fair cost landed just above a half-cent was billed down: the student got shares worth more than they paid, realised on sale. Selectable, not luck — a `0.0036`-share buy at a $100,000/2,500 pool cost $0.144 and billed $0.14 **every time**. Through the real API, **60 buys + 1 sell turned $1000.00 into $1000.24** (~$14/hour at the rate limit, zero risk, in a game scored on final balance). A sweep of ~1,500 quantity/count combos over four pool shapes found **708 profitable**; after the fix, **zero**. Cash now rounds *against* the trader (ceil when paying, floor when paid) and the pool moves by exactly what changed hands. **Do not "simplify" this back to `round()` — that is the bug.** A first attempt that only made cash *conserved* did **not** fix it (still exactly +$0.24): the rounding *direction* was the defect.
+2. **A collapsed price 500'd events, and bricked the company** (`d7bd23e`). `price_history.price` is `numeric(18,6)` with `price > 0`, so under 0.0000005 it rounds to `0.000000` and the insert is rejected. 40 negative shocks at one company → **13 × 500**, then the company sat permanently stuck where every later shock failed; the daily cron hits the same wall silently.
+3. **The same thing at the top end** (`4212673`) — 60 positive shocks at the largest creatable company → **8 × 500 `numeric field overflow`**, pool cash at 96 trillion against `numeric(18,4)`.
+   → Both fixed by `clampPoolCash` holding price in **$0.0001 – $1,000,000,000** (`MIN_SPOT_PRICE` / `MAX_SPOT_PRICE` in `events.ts`). Shocks and drift clamp (no counterparty, so inventing/absorbing that cash is free); a **trade refuses** instead, since clamping there would hand a student cash the pool never gave up.
+4. **Deleting a company destroyed a student's money** (`4a4fad2`). The "has it been traded" check and the delete were separate statements, so a trade committing in between was invisible and then cascade-deleted: in the repro a student **paid $200 and their holding and trade row both vanished while the cash stayed gone** — no trace in the trade log. Now one transaction locking the company row first (the lock `executeTrade` takes). Also refuses while anyone holds shares.
+5. **Reset deadlocked against live trades** (`4a4fad2`). `executeTrade` locks company→user; `resetGame` locked users first then wanted companies. Postgres killed the *trade* 4/4 runs — a student mid-purchase got "Trade failed. Try again." for no reason, and victim choice isn't guaranteed. `resetGame` now takes all company locks up front `order by id`. Also closed a narrower hole where a trade committing between `delete from holdings` and the pool reset left the student holding last term's shares *plus* a full starting balance.
+6. **Starting cash under $1 zeroed the whole class** (`c57aa58`). `0.001` passed `positive()` but `numeric(14,2)` stored `0.00`, so every signup and every reset gave students **$0.00** and no trade could be placed. The form already had `min="1"`; only the API let it through. Now bounded in schema *and* service, rounded to cents so stored == displayed, and the route reports the specific rule instead of "Invalid input".
+7. **The client trade preview desynced from the server** (`e5e9c47`) — introduced by fix 1. It still rounded to nearest, so the confirmation screen quoted a cent under what was charged, while its comment claimed it mirrored `executeTrade`. Now mirrors the rounding, the 4 dp quantization and the under-a-cent refusal; verified by compiling the module and diffing against the server over 2,240 combos (0 mismatches).
+8. **The cron route had no rate limiter** (`e5e9c47`), making §6's "rate limiting on every endpoint" untrue and leaving a leaked `CRON_SECRET` able to fire unlimited events. Now 30/hour globally, checked *after* the secret.
+9. **Leaderboard and export had no tiebreak** (`f9aa9fc`) — latent, not observed (13 tied students, 8 polls, never shuffled), but the export's Rank goes in a gradebook. Ties now break on name then id.
+10. **The company form previewed `$Infinity`** (`687c263`) while typing `0` shares (`shares || "1"` doesn't catch a truthy `"0"`).
+
+Also **checked and found correct — don't re-investigate**: `cash_tax` already floors at 0; a market delisted to zero tradeable companies degrades gracefully (pages render, trades give a clear message, relist recovers); `events.affected_company_ids` is never resolved to rows, so dangling ids are harmless; concurrent signups racing the same username/email create exactly one row; logout is POST-only, session-scoped and idempotent; cron rejects missing/wrong/un-prefixed secrets; `/company/[id]` and `/admin/students/[id]` 404 on malformed, unknown and non-student ids; pool size is genuinely locked on company edit and ticker collisions 409 on both create and edit; delist/relist with holdings blocks both sides and restores cleanly; every other division in the app is guarded or divides by a column constrained `> 0`; max-length values (80-char name, 50-char username, 8-char ticker, 60-char company name) render on every page; zero-share holdings are hidden; and the lateral baseline from fix 7 of §5b matches the naive query exactly (0/24 mismatches).
+
+**Scale**: at an end-of-term dataset (36 students, 57k price rows, 21 MB) every page served **under 100 ms** and every API under 45 ms.
+
 ## 6. Security model as it stands
 
 - **Passwords:** bcryptjs, 12 rounds. Min 8 / max 72 chars, plus a
@@ -361,6 +381,9 @@ placeholder `DATABASE_URL` → `npx next lint`.
    biggest remaining risk and nothing local substitutes for it.
 
 ### Known open issues (none are crashes)
+
+- **The company page ships ~40 KB / 2,400 price rows per render**, on every 20s auto-refresh, because `PriceChart` filters 1H/1D/5D client-side and so needs the full 5 days. At 30 students sitting on company pages that is roughly 3.6 MB/min out of Neon, ~200 MB/hour — the same egress class as the `getCompanyQuotes` problem fixed in §5b, and a plausible way to burn through the free tier mid-term. A server-side downsample (full resolution for the last hour, coarser before) would cut it ~5x. **Deliberately not done**: the user has explicitly said the 1D and 5D charts look right, changing data density risks that, and visual output can't be verified from here. Measure Neon usage after the first real class before touching it.
+- **There is no trading fee or spread.** Before the rounding fix a buy-then-sell round trip was *exactly* free; it now costs a cent, purely from rounding. If the goal is to teach that trading has a cost, a real percentage fee would do it properly. Teaching-design choice, not a defect.
 
 - **Impersonation on the leaderboard.** The leaderboard now shows real names instead
   of `@username` (the user's explicit choice). Names are not unique — correctly, real
